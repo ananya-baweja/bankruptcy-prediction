@@ -2,6 +2,11 @@
 
 One person (Ananya) does Part A and B once. Everyone else does Part C.
 
+> **Placeholders in this document are written as `YOUR-USERNAME`, with no angle brackets.**
+> Never type `<` or `>` into a Command Prompt. In Windows, `<` means "read input from a file",
+> so a command containing `<your-username>` fails with *"The system cannot find the file
+> specified"* and git never runs at all.
+
 ---
 
 ## Part A — First commit (on the laptop that holds the project)
@@ -41,27 +46,43 @@ git commit -m "Phases 0-2: cohort building and document processing"
 
 ## Part B — Create the repository and push
 
-**Option 1 — GitHub CLI** (if `gh` is installed and you have signed in with `gh auth login`):
-
-```bat
-gh repo create bankruptcy-prediction --private --source=. --push
-```
-
-**Option 2 — GitHub website** (works without any extra tools):
+### Step 1: create an empty repository
 
 1. Go to github.com → **New repository**.
 2. Name: `bankruptcy-prediction`. Visibility: **Private**.
 3. Do **not** tick "Add a README", "Add .gitignore" or "Choose a license" — the repository must be
    empty, otherwise the first push is rejected.
-4. Create the repository, then run:
+4. Create it.
+
+### Step 2: connect and push
+
+**Easiest — double-click `git_push.bat`.** It asks you to type your GitHub username, builds the
+URL for you, replaces any broken remote, pushes, and explains any error it hits.
+
+**By hand**, from a Command Prompt in the project folder. Replace `YOUR-USERNAME` with your real
+GitHub username — type it in, do not keep the capital letters or add angle brackets:
 
 ```bat
-git remote add origin https://github.com/<your-username>/bankruptcy-prediction.git
+git remote add origin https://github.com/YOUR-USERNAME/bankruptcy-prediction.git
+git remote -v
 git push -u origin main
 ```
 
+`git remote -v` must print two lines showing your URL. If it prints nothing, the remote was not
+added — check the command for stray `<` or `>` characters and run it again. If it shows the wrong
+URL, run `git remote remove origin` first, then add it again.
+
 When the browser window appears, sign in to GitHub. Git for Windows stores the credentials, so
 later pushes will not ask again. Never type a personal access token into a chat or a document.
+
+### If the push fails
+
+| Message | Cause | Fix |
+| --- | --- | --- |
+| `The system cannot find the file specified` | The command contained `<` or `>` | Retype the URL with your real username and no angle brackets |
+| `'origin' does not appear to be a git repository` | The remote was never added (usually the row above) | Run `git remote -v`; if empty, add the remote again |
+| `Repository not found` | The repo does not exist on GitHub yet, or the username is spelt differently | Create it, or check the spelling on your GitHub profile page |
+| `Updates were rejected / fetch first` | The repo was created **with** a README | `git pull --rebase origin main`, then push again |
 
 ### Add your teammates as collaborators
 
@@ -69,10 +90,10 @@ On the repository page: **Settings → Collaborators → Add people**, type each
 username, and send the invitation. They receive an email and must accept it before they can clone
 a private repository.
 
-Then send them the clone URL:
+Then send them the clone URL (with your real username in place of `YOUR-USERNAME`):
 
 ```
-https://github.com/<your-username>/bankruptcy-prediction.git
+https://github.com/YOUR-USERNAME/bankruptcy-prediction.git
 ```
 
 **If a teammate cannot reach the private repository** (for example, an automated environment
@@ -85,9 +106,11 @@ the `git status` list is clean.
 
 ## Part C — Everyone else: clone and set up
 
+Replace `OWNER` with the GitHub username that owns the repository.
+
 ```bat
 cd /d "C:\wherever\you\keep\projects"
-git clone https://github.com/<owner>/bankruptcy-prediction.git
+git clone https://github.com/OWNER/bankruptcy-prediction.git
 cd bankruptcy-prediction
 
 conda env create -f environment.yml
@@ -118,10 +141,11 @@ bpp --data-dir "G:\My Drive\BPP-data" status
 
 ### If something does get committed by mistake
 
-Stop and tell the team before pushing. If it has not been pushed yet:
+Stop and tell the team before pushing. If it has not been pushed yet — replace `PATH` with the
+offending file or folder:
 
 ```bat
-git rm -r --cached <path>
+git rm -r --cached PATH
 git commit --amend -C HEAD
 ```
 
