@@ -81,3 +81,16 @@ extraction:
 qa:
   sample_size: 30
   random_seed: 7
+
+# ---------------- Phase 3: financial statements and ratios ------------------
+financials:
+  default_unit: crore         # assumed when a statement header states no scale
+  max_pages_per_statement: 4  # a balance sheet or P&L rarely runs longer
+  min_money_lines: 5          # a page with fewer figures is describing a statement, not one
+  use_table_extraction: true  # pdfplumber/camelot on ruled statements (text walk always runs)
+  table_flavours: [pdfplumber, camelot]
+  restatement_tolerance: 0.005  # |as first published - next year's comparative| / scale
+  balance_tolerance: 0.01       # total assets vs equity + liabilities
+  scale_jump_factor: 8          # total assets moving by more than this -> suspect the unit
+  required_fields: [total_assets, current_assets, current_liabilities, total_equity]
+  spot_check_fraction: 0.10     # share of company-years put in the hand-check sheet

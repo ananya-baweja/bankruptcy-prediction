@@ -2,6 +2,61 @@
 
 What was done each working session, newest first. Keep entries short: what, result, next.
 
+## 2026-09-23 — Phase 3 built (financial features, `bpp financials`)
+
+**Done**
+- `bpp financials` and `bpp financials-score`, plus `src/bpp/features/{numbers,statements,ratios,financials}.py`
+  and `docs/06_phase3_financials.md`.
+- Locates the **standalone** balance sheet, P&L and cash flow statement in Phase 2's page text (no
+  re-OCR), reads the unit and period columns from the header, walks the lines tracking Schedule III
+  sub-headings, and maps line items to 20 standard fields. Ruled tables go through pdfplumber or
+  camelot when available; the text walk always runs, so scanned statements still work.
+- Both the current-year and prior-year columns are read. Figures are stored **as first published**;
+  the next year's comparative cross-checks them (`restated`) or fills a missing year.
+- Validation: both balance-sheet identities, subtotal containment, unit-scale checks against the
+  cohort's own assets and against last year, and a confidence score per figure.
+- The 12 stream-C ratios of Table 7, including Altman EM Z'' with its zones. Ratios with a negative
+  or zero denominator return empty with a reason, and the condition is kept as its own feature.
+- Missing-data flag per company-year (rows kept, never dropped), the gap-filling order, the
+  pair-exclusion rule, and the unrecoverable count **by class** printed every run.
+- Spot-check sheet: a random 10% of company-years with page numbers, scored by `bpp financials-score`.
+- `synthetic.py` gained `financial_statements=False` (off by default, so Phases 1–2 are unchanged),
+  which writes proper Schedule III statements with a prior-year column, a stated unit, bracketed
+  negatives, a note column and a consolidated set to discriminate against.
+
+**Checked on synthetic data (not real results)**
+- 173 new tests pass, covering: units (crore / lakh / million / thousand / rupee all normalising to
+  the same ₹ crore figure), Indian and Western digit grouping, bracketed negatives, Nil/NA/em-dash,
+  OCR damage, refusal on unrecoverable cells, standalone-vs-consolidated preference, `Borrowings`
+  disambiguated by sub-heading, both year columns, as-first-published, restatement detection,
+  gap-filling from a comparative and from the XBRL CSV, unrecoverable years, pair exclusion, the
+  spot-check sheet, and every ratio hand-computed.
+- The extracted balance sheet balances exactly on the synthetic reports, and the table path
+  (pdfplumber) and the text path agree figure for figure.
+- An adversarial code review was run over the module and found eleven ways a figure could come out
+  wrong but plausible, all of which the first round of tests had missed because the fixtures were
+  too clean. All are fixed and each has a regression test in `tests/test_financials_robustness.py`.
+  The ones worth knowing about: a blank money column let a note reference become this year's figure;
+  a unit word in prose ("turnover crossed Rs. 500 crore") overrode the real "(Rs. in lakhs)" caption
+  and made every figure 100x too large; the auditor's report quotes the balance sheet's title and
+  was winning the statement's location; a merged table cell "500 400" silently became 500400; and
+  the Altman safe/grey/distress cutoffs were being read against the +3.25 rating-equivalent scale
+  rather than the discriminant, which called a failing firm "safe".
+
+**Not verified yet (needs real reports)**
+- **Step 9 of the brief — the run on 5 real reports (2 insolvent, 3 healthy) has not happened**,
+  because Phase 2 has not yet been run on real PDFs. Nothing here has met a real annual report. The
+  line-item patterns and the statement-page locator are the parts most likely to need work; expect
+  to add patterns to `FIELD_PATTERNS` after the first real batch.
+- Whether `retained_earnings` appears on the face of the balance sheet often enough, or whether
+  `other_equity` will stand in for nearly every firm.
+
+**Next**
+1. Run Phase 2 on real reports, then `bpp financials` on 5 of them (2 insolvent, 3 healthy) and
+   record what failed here before scaling up.
+2. Fill the spot-check sheet and record the accuracy per field.
+3. Promoter pledge % from the exchange shareholding filings — the column is reserved and empty.
+
 ## 2026-09-21 — Progress report for the professor
 
 **Done**
