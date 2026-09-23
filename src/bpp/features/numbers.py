@@ -107,6 +107,47 @@ _SCALE_QUALIFIER = re.compile(
     r"[^()\n]{0,25}$", re.I)
 
 
+#: a column-header line that names the currency and nothing else - "Rupees Rupees",
+#: "Amount (Rs.)", "(In ₹)" - means the figures are printed in rupees
+_RUPEE_HEADER = re.compile(
+    r"^(?:\s*(?:amount|amt\.?|figures|in|as\s+(?:at|on)|note|notes|no\.?|particulars|current|previous|year|"
+    r"ended|[0-9./-]+|31st|march|mar|\(|\)|₹|rs\.?|inr|rupees)\s*)+$", re.I)
+_RUPEE_WORD = re.compile(r"₹|\brs\b|\brs\.|\binr\b|\brupees\b", re.I)
+
+
+def rupee_column_header(text: str, max_lines: int = 25) -> bool:
+    """True when an early line of the page is only currency labels over the columns."""
+    for line in text.split("\n")[:max_lines]:
+        line = line.strip()
+        if len(line) < 3 or not _RUPEE_WORD.search(line):
+            continue
+        if re.search(r"crore|lakh|lac|million|thousand|'000|billion", line, re.I):
+            return False
+        if _RUPEE_HEADER.match(line) and len(_RUPEE_WORD.findall(line)) >= 1:
+            return True
+    return False
+
+
+def infer_unit_from_magnitude(printed: list[float]) -> str | None:
+    """Rupees, when a statement's figures are large whole numbers; else no opinion.
+
+    Small companies print statements in absolute rupees with no caption at all
+    (real example: "Total Assets 784,454,285"). Read with the default crore
+    scale, every figure is 10^7 too large. Whole numbers with a median above
+    100,000 are not crores or lakhs (those print with decimals and fewer digits).
+    Lakhs versus crore cannot be told apart this way and are left alone.
+    """
+    vals = [abs(v) for v in printed if v is not None and v != 0]
+    if len(vals) < 5:
+        return None
+    vals.sort()
+    median = vals[len(vals) // 2]
+    whole = sum(1 for v in vals if float(v).is_integer()) / len(vals)
+    if median >= 1e5 and whole >= 0.8:
+        return "rupee"
+    return None
+
+
 def detect_unit(text: str, default: str = "crore") -> tuple[str, float]:
     """Read the scale out of a header or caption.
 
@@ -136,6 +177,8 @@ def detect_unit(text: str, default: str = "crore") -> tuple[str, float]:
                 continue                       # "Cr", "Mn", "Bn" on their own prove nothing
             found.append((match.start(), name, qualified))
     if not found:
+        if rupee_column_header(hay):
+            return "rupee", 0.80
         return default, 0.20
 
     found.sort()
@@ -169,6 +212,13 @@ def parse_number(raw: object, unit: str = "crore") -> ParsedNumber:
         negative = True
         out.negative_style = "minus"
         s = re.sub(r"[-−–]", "", s)
+    # OCR drops the opening bracket more often than the closing one:
+    # "Other equity 77,331,519) 25,760,299" is a negative (seen on a scanned report)
+    elif re.fullmatch(r"\s*[\d.,]+\s*\)\s*", s):
+        negative = True
+        out.negative_style = "bracket_unbalanced"
+        out.flag("ocr_lost_open_bracket", 0.15)
+        s = s.replace(")", "")
 
     s = _STRIP.sub("", s).strip()
     if not s or s.lower() in _NIL_TOKENS:
@@ -247,7 +297,7 @@ def parse_number(raw: object, unit: str = "crore") -> ParsedNumber:
 _CELL_TOKEN = re.compile(
     r"(?P<num>"
     r"\(\s*(?:₹|Rs\.?)?\s*\d[\d,]*(?:\.\d+)?\s*\)"        # (1,230.75)
-    r"|[-−]?\d[\d,]*(?:\.\d+)?"                            # 1,204.55 / -88.12
+    r"|[-−]?\d[\d,]*(?:\.\d+)?(?:\)(?![\w(]))?"            # 1,204.55 / -88.12 / 7,519) (OCR lost "(")
     r")"
     r"|(?P<nil>"
     r"(?<![\w-])(?:-{1,3}|–|—|―)(?![\w-])"       # a standalone dash
@@ -257,6 +307,11 @@ _CELL_TOKEN = re.compile(
 )
 
 
+_FORMULA = re.compile(
+    r"\(\s*(?:\d{1,2}|[IVXivx]{1,5}|[A-H])\s*[-+]\s*(?:\d{1,2}|[IVXivx]{1,5}|[A-H])"
+    r"(?:\s*[-+]\s*(?:\d{1,2}|[IVXivx]{1,5}|[A-H]))*\s*\)")
+
+
 def find_cell_spans(line: str) -> list[tuple[str, str, int, int]]:
     """Every money-column cell, as ``(token, kind, start, end)``.
 
@@ -264,10 +319,19 @@ def find_cell_spans(line: str) -> list[tuple[str, str, int, int]]:
     be a substring of another (``10.00`` inside ``110.00``), so the label/figure
     split cannot be done by searching for the token text.
     """
+    # A formula reference is not a cell: "Profit before tax (1-2)", "(III-IV)", "(5+6)"
+    line = _FORMULA.sub(lambda m: " " * len(m.group(0)), line)
+    # OCR puts a space before a thousands comma ("6 ,24,79,590"); a space never
+    # precedes a comma in print, so closing it up cannot join two real cells.
+    # Positions are mapped back so they still index the original line.
+    kept = [i for i, ch in enumerate(line)
+            if not (ch == " " and 0 < i < len(line) - 2 and line[i - 1].isdigit()
+                    and line[i + 1] == "," and line[i + 2].isdigit())]
+    text = "".join(line[i] for i in kept)
     out: list[tuple[str, str, int, int]] = []
-    for m in _CELL_TOKEN.finditer(line):
+    for m in _CELL_TOKEN.finditer(text):
         kind = "num" if m.group("num") else "nil"
-        out.append((m.group(0).strip(), kind, m.start(), m.end()))
+        out.append((m.group(0).strip(), kind, kept[m.start()], kept[m.end() - 1] + 1))
     return out
 
 
@@ -306,13 +370,38 @@ def split_label_and_figures(line: str, n_periods: int = 2) -> tuple[str, list[st
     shortfall rather than receive silently padded columns.
     """
     spans = find_cell_spans(line)
+    # Cells come after the label. Anything before its first letter is a list
+    # marker: "(2) Current Assets" read "(2)" as a negative figure and the heading
+    # never set the context; " - Cash and cash equivalents 13 2.46" read the
+    # bullet as an empty column (both on real reports).
+    first_letter = re.search(r"[A-Za-z]", line)
+    if first_letter:
+        spans = [s for s in spans if s[2] >= first_letter.start()]
     if not spans:
         return _tidy_label(line), []
+    # Short line: fewer cells than periods. When the first cell is a bare one- or
+    # two-digit integer and what follows is money-shaped (or nothing follows), the
+    # first cell is the note reference, not this year's figure. PDF text often puts
+    # a row's figures on the next lines ("Revenue from Operations 19" / "27,053,549")
+    # or only this year's figure on the label's line ("Revenue 20 68,77,51,670");
+    # position alone read 19 and 20 as rupees of revenue (found on real reports).
+    if len(spans) <= n_periods and spans[0][1] == "num" and re.fullmatch(r"\d{1,2}", spans[0][0]):
+        rest = spans[1:]
+        if not rest or any(kind == "num" and _money_shaped(tok) for tok, kind, _, _ in rest):
+            label = line[:spans[0][2]]
+            return _tidy_label(label), [tok for tok, _, _, _ in rest]
     figures = spans[-n_periods:] if len(spans) >= n_periods else spans
     label = line[:figures[0][2]]
     # a note reference sits between the label and the money -- drop it
     label = re.sub(r"[\s.:…]*\b\d{1,2}(?:\.\d{1,2})?\s*$", "", label)
     return _tidy_label(label), [tok for tok, _, _, _ in figures]
+
+
+def _money_shaped(token: str) -> bool:
+    """A cell that can only be a figure: separators, brackets, decimals or 4+ digits."""
+    t = token.strip()
+    return ("," in t or "(" in t or bool(re.search(r"\.\d{1,2}$", t))
+            or len(re.sub(r"\D", "", t)) >= 4)
 
 
 def _tidy_label(text: str) -> str:

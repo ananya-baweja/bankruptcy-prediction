@@ -25,6 +25,25 @@ Conventions: `firm_id` = `BSE<scrip code>` (or `NSE_<symbol>`), `fy` = year the 
 | `annual_reports/<firm_id>/FY<year>.pdf` | `reports-download` or by hand | the reports |
 | `annual_reports/_listings/<src>_<code>.json` | `reports-list` | cached exchange responses |
 
+## Collected by the download agent (`raw/`, from 2026-09-23)
+
+The laptop agent (`bpp_fetch.py`, see `docs/08_real_data.md`) writes these. Files ending `.jsonl` hold one
+JSON line per request: `{key, url, http, content_type, fetched_at, meta, body}` with the raw response in `body`;
+when a key repeats, the last line wins. `logs/<job>.csv` records every request with its size and SHA-256.
+
+| File | Content |
+| --- | --- |
+| `ibbi/ibbi_cirp_export.tsv` | IBBI's export of every CIRP public announcement, **with the debtor's CIN** |
+| `ibbi/public_announcements_export.csv` | the same, parsed: `pa_type, announcement_date, last_submission_date, corporate_debtor, cin, applicant, insolvency_professional, remarks, cin_listed, cin_nic, cin_state, cin_incorporation_year, cin_company_type, name_norm` |
+| `listed/bse_scrips_{active,suspended,delisted}.json` | BSE `ListofScripData` per status |
+| `listed/bse_company_header.jsonl` | BSE `ComHeadernew` per scrip: ISIN, group, Sector > Industry > Group > Sub-group |
+| `listed/bse_industry_list.json` | the 186 BSE sub-groups with their hierarchical codes (`IN020101002`) |
+| `listed/bse_industry_members_traded.jsonl` | per sub-group, the members traded on the collection day (max 30) |
+| `listed/nse_namechange.csv`, `nse_symbolchange.csv` | NSE's lists of company renames and symbol changes |
+| `xbrl/_listings/bse_result_archive.jsonl` | BSE `Result_Arch_ng` per scrip: every results filing with its XBRL links and filing time |
+| `xbrl/results_standalone_annual.jsonl` | the standalone annual results XBRL instances, keyed `<firm_id>_FY<fy>` |
+| `annual_reports/_listings/bse_annual_reports.jsonl` | BSE `AnnualReport_New` per scrip: PDF link and filing time per year |
+
 ## Interim (`interim/`)
 
 | File | Key columns |
@@ -41,6 +60,17 @@ Conventions: `firm_id` = `BSE<scrip code>` (or `NSE_<symbol>`), `fy` = year the 
 | `qa/section_qa_scores.csv` | per section: `n_checked, found_accuracy, start_accuracy, end_accuracy, exact_span_accuracy` |
 | `qa/financials_spot_check.csv` | a random 10% of company-years x every extracted field: `firm_id, fy, field, value_cr, source, source_doc_id, page, statement, label, printed, unit, confidence, parse_flags` + `value_correct, page_correct, true_value_cr, notes` to fill in |
 | `qa/financials_spot_check_scores.csv` | per field: `n_checked, value_accuracy, page_accuracy` |
+
+### From exchange data (`scripts/exchange_pipeline.py`, `scripts/process_reports.py`)
+| File | Content |
+| --- | --- |
+| `ibbi_cirp_debtors.csv` | one row per corporate debtor (keyed by CIN, else name): earliest CIRP date, all names used, applicant, CIN fields, `self_filed` |
+| `ibbi_listed_matches.csv` | as before, plus `cin`, `listing_evidence (cin_L / no_cin)`, `report_cin`, `report_cin_check` |
+| `distressed_eligibility.csv` | every matched insolvent firm: reference FY, BSE industry, reports before admission, XBRL size year, `eligible`, `ineligible_reason` |
+| `pilot_distressed.csv`, `pilot_peer_candidates.csv`, `pilot_pairs.csv`, `pilot_unmatched.csv` | the pilot sample, its possible peers, the chosen pairs, and firms left without a peer (with the reason) |
+| `xbrl_financials_exchange.csv` | `firm_id, fy, field, value_cr, source_url, note` parsed from the exchange XBRL filings (Rs crore) - Phase 3 reads it first when `xbrl_priority: first` |
+| `report_cin_check.csv` | per insolvent firm: the IBBI CIN, the CIN printed in its reports, and `confirmed / confirmed_reg_no / mismatch / cin_not_found` |
+| `text_extraction_summary.csv` | per report: pages, OCR pages, backend, seconds |
 
 ## Processed (`processed/`)
 
@@ -65,7 +95,7 @@ Conventions: `firm_id` = `BSE<scrip code>` (or `NSE_<symbol>`), `fy` = year the 
 | `needs_leakage_review` | distressed, included, and mentions CIRP terms → read it |
 
 ### `financials_figures.csv` — one row per extracted figure (Phase 3 audit trail)
-`firm_id, fy, field, value_cr, source (report_current_year | next_report_comparative | manual_xbrl),
+`firm_id, fy, field, value_cr, source (exchange_xbrl | report_current_year | next_report_comparative | manual_xbrl),
 source_doc_id, page, statement, statement_scope, label, match_how, match_score, unit,
 unit_confidence, printed, parse_confidence, parse_flags, ocr_pages, restated, restatement_diff,
 has_comparative, validation_flags, confidence`
@@ -73,6 +103,16 @@ has_comparative, validation_flags, confidence`
 `value_cr` is ₹ crore; `printed` is the figure as the report showed it, in `unit`. `restated` means
 the next year's comparative disagreed with the figure as first published — the first-published one
 is kept either way.
+
+With `xbrl_priority: first`, a figure the exchange XBRL filing has is taken from it
+(`source = exchange_xbrl`, `source_doc_id` = the XBRL file's URL) and the report's own reading is kept
+beside it:
+
+| Column | Meaning |
+| --- | --- |
+| `pdf_value_cr, pdf_source, pdf_source_doc_id, pdf_page` | what the annual report gave for the same field, and where |
+| `xbrl_pdf_diff` | relative gap between the two (0 = identical); the PDF reader's accuracy on real reports |
+| `unit_check` | blank, `xbrl_unit_suspect` (the XBRL filing is off by a power of ten against a report that states its unit — the filing is not used for that company-year) or `pdf_unit_suspect` (the report reading is the one off) |
 
 ### `financials_extracted.csv` — one row per company-year
 The standard fields (`total_assets, current_assets, current_liabilities, inventories,
@@ -89,7 +129,7 @@ all in ₹ crore, plus:
 | `scale_vs_cohort, scale_vs_previous_year` | total assets against the two unit-scale anchors |
 | `validation_flags, n_validation_flags` | see `docs/06_phase3_financials.md` |
 | `missing_fields, n_fields_found, has_core_financials` | what was and was not recovered |
-| `financials_source` | `report_current_year` / `next_report_comparative` / `manual_xbrl` / `missing` |
+| `financials_source` | `exchange_xbrl` / `report_current_year` / `next_report_comparative` / `manual_xbrl` / `missing` |
 | `financials_missing` | True when a required field is absent — the row is still kept |
 | `financials_exclude_reason` | blank, `missing_financials`, or `pair_partner_missing_financials` |
 | `included_financials` | True for rows usable in modelling |

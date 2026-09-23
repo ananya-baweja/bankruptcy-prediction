@@ -72,6 +72,11 @@ class Paths:
         return self.manual / "xbrl_financials.csv"
 
     @property
+    def xbrl_exchange(self) -> Path:
+        """Figures parsed from the exchanges' XBRL annual results (bpp xbrl-financials)."""
+        return self.interim / "xbrl_financials_exchange.csv"
+
+    @property
     def lm_dictionary(self) -> Path:
         """Phase 4: the Loughran-McDonald dictionary, downloaded once by the team.
 

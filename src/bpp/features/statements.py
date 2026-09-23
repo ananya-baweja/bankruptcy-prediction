@@ -189,7 +189,18 @@ def locate_statements(pages: list[dict[str, Any]], cfg: dict[str, Any],
         tier = {"standalone": 0, "unscoped": 1, "consolidated": 2}
         substantive = [h for h in candidates if money_lines.get(h[2], 0) >= min_money_lines]
         pool = substantive or candidates
-        _, scope, start_page, heading = min(pool, key=lambda h: (tier[h[1]], h[2]))
+        anchor = out.get("balance_sheet")
+        if name != "balance_sheet" and anchor is not None:
+            # The statements are printed as a block: balance sheet, then P&L, then
+            # cash flow. A "Profit and Loss" table earlier in the report is the
+            # directors' financial highlights, not the statement (found on real
+            # reports: it won on "earliest page" and fed the model a summary).
+            after = [h for h in pool if h[2] >= anchor.start_page and tier[h[1]] <= tier[anchor.scope]]
+            pool = after or pool
+            _, scope, start_page, heading = min(pool, key=lambda h: (tier[h[1]], h[2] - anchor.start_page
+                                                                    if h[2] >= anchor.start_page else 10_000 + h[2]))
+        else:
+            _, scope, start_page, heading = min(pool, key=lambda h: (tier[h[1]], h[2]))
         end_page = _statement_end(pages, start_page, max_pages, all_starts - {start_page})
 
         loc = StatementLocation(statement=name, scope=scope, start_page=start_page,
@@ -314,15 +325,47 @@ CONTEXT_PATTERNS: list[tuple[str, str]] = [
 ]
 _CONTEXT_COMPILED = [(name, re.compile(pat, re.I)) for name, pat in CONTEXT_PATTERNS]
 
+#: Schedule III enumerators in front of a label: "(2)", "(iii)", "a)", "1.", "II", "B".
+#: Left in place they defeat every anchored pattern: "(2) Current Assets" was not
+#: seen as the current-assets heading, so borrowings lost their context (real reports).
+_ENUMERATOR = re.compile(
+    r"^\s*(?:(?i:\(\s*(?:[ivxlc]{1,5}|[a-z]|\d{1,2})\s*\)|(?:[ivxlc]{1,5}|[a-z]|\d{1,2})\s*[.)])"
+    r"|(?:[IVX]{1,4}|[A-H])(?=\s))\s*")
+
+
+def strip_enumerator(label: str) -> str:
+    """Drop leading list markers, repeatedly: ``"B) (i) Borrowings"`` -> ``"Borrowings"``."""
+    prev = None
+    s = label
+    while s != prev:
+        prev = s
+        s = _ENUMERATOR.sub("", s, count=1)
+    return s
+
 
 def detect_context(label: str) -> str | None:
-    cand = re.sub(r"\s+", " ", label).strip().strip(":-– ")
+    cand = strip_enumerator(re.sub(r"\s+", " ", label).strip()).strip(":-– ")
     if len(cand) > 60:
         return None
     for name, rx in _CONTEXT_COMPILED:
         if rx.search(cand):
             return name
     return None
+
+
+#: a section heading printed with its own total ("Current liabilities 8,002.68 8,354.75")
+_SECTION_HEADINGS: dict[str, str] = {
+    "non current assets": "non_current_assets", "current assets": "current_assets",
+    "non current liabilities": "non_current_liabilities", "current liabilities": "current_liabilities",
+    "equity": "total_equity", "shareholders funds": "total_equity", "shareholder s funds": "total_equity",
+}
+
+#: the unlabelled line that closes a section is its total, when it equals the section's sum
+_SUBTOTAL_FIELD: dict[str, str] = {
+    "non_current_assets": "non_current_assets", "current_assets": "current_assets",
+    "equity": "total_equity", "non_current_liabilities": "non_current_liabilities",
+    "current_liabilities": "current_liabilities",
+}
 
 
 @dataclass
@@ -335,34 +378,124 @@ class LineItem:
     source: str = "text"          # "text" | "pdfplumber" | "camelot"
 
 
+_BARE_TOTAL = re.compile(r"^total(?:\s+(?:rupees|rs|amount|inr))?$")
+_ASSET_SIDE = {"non_current_assets", "current_assets", "assets"}
+_LIABILITY_SIDE = {"equity", "non_current_liabilities", "current_liabilities", "liabilities",
+                   "equity_and_liabilities"}
+
+
+def _adds_up(value: float | None, total: float, n_items: int) -> bool:
+    if value is None:
+        return False
+    tol = max(0.005 * max(abs(value), abs(total)), 0.011 * max(n_items, 1))
+    return abs(value - total) <= tol
+
+
+def _join_following_figures(lines: list[str], i: int, label: str, n_periods: int) -> tuple[list[str], int]:
+    """The figures of a row printed on the lines after its label (common in PDF text of
+    rupee statements: ``Revenue from Operations 19`` / ``27,053,549`` / ``32,663,618``)."""
+    if not label or len(label) > 90 or label.rstrip().endswith(":"):
+        return [], i
+    got: list[str] = []
+    j = i
+    while j < len(lines) and len(got) < n_periods and j - i < 6:
+        nxt = lines[j].strip()
+        if not nxt:
+            j += 1
+            continue
+        lab2, toks2 = split_label_and_figures(nxt, n_periods)
+        if lab2 or not toks2:
+            break
+        got.extend(toks2)
+        j += 1
+    if not got:
+        return [], i
+    return got[:n_periods], j
+
+
 def parse_statement_lines(pages: list[dict[str, Any]], loc: StatementLocation) -> list[LineItem]:
-    """Walk the statement's pages and turn every money line into a LineItem."""
+    """Walk the statement's pages and turn every money line into a LineItem.
+
+    Besides labelled lines this reads three layouts found on real reports:
+
+    * a row whose figures sit on the lines after its label (joined to the label);
+    * a section total printed with no label, or as a bare ``Total``: taken as the
+      section's total only when it equals the sum of the section's rows, so a
+      grand total or a stray figure is never mistaken for one;
+    * a section heading that carries the section total on its own line.
+    """
     n_periods = max(1, len(loc.period_fys) or 2)
     items: list[LineItem] = []
     context: str | None = None
+    section_sum, section_n = 0.0, 0
+    subtotals: dict[str, LineItem] = {}
+
+    def switch(ctx: str | None) -> None:
+        nonlocal context, section_sum, section_n
+        if ctx != context:
+            section_sum, section_n = 0.0, 0
+        context = ctx
+
     for page in pages:
         if not (loc.start_page <= page["page"] <= loc.end_page):
             continue
-        for raw_line in page["text"].split("\n"):
-            line = raw_line.rstrip()
+        lines = [raw.rstrip() for raw in page["text"].split("\n")]
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+            i += 1
             if not line.strip():
                 continue
+            raw = line.strip()
             label, figure_tokens = split_label_and_figures(line, n_periods)
             if not figure_tokens:
                 ctx = detect_context(line)
                 if ctx:
-                    context = ctx
+                    switch(ctx)
+                    continue
+                figure_tokens, i = _join_following_figures(lines, i, label, n_periods)
+                if not figure_tokens:
+                    continue
+                raw = f"{raw} {' '.join(figure_tokens)}"
+            figures = [parse_number(tok, loc.unit) for tok in figure_tokens]
+            first = figures[0].printed if figures and figures[0].ok else None
+
+            norm = _normalise_label(label) if label else ""
+            if not label or _BARE_TOTAL.match(norm):
+                # an unlabelled (or bare "Total") line: a section total if it adds up
+                if first is None:
+                    continue
+                if context in _SUBTOTAL_FIELD and section_n >= 2 and _adds_up(first, section_sum, section_n):
+                    subtotals[context] = LineItem(
+                        label="total " + context.replace("_", " "), figures=figures, page=page["page"],
+                        context=context, raw=raw, source="subtotal")
+                elif label and context in _ASSET_SIDE:
+                    items.append(LineItem(label="total assets", figures=figures, page=page["page"],
+                                          context=context, raw=raw, source="bare_total"))
+                elif label and context in _LIABILITY_SIDE:
+                    items.append(LineItem(label="total equity and liabilities", figures=figures,
+                                          page=page["page"], context=context, raw=raw, source="bare_total"))
                 continue
-            if not label:
-                continue
+
+            heading = _SECTION_HEADINGS.get(_heading_key(norm))
             ctx_here = detect_context(label)
             if ctx_here:
-                context = ctx_here
-            figures = [parse_number(tok, loc.unit) for tok in figure_tokens]
+                switch(ctx_here)
             if not any(f.ok for f in figures):
+                if ctx_here is None:
+                    section_n += 1              # an explicitly empty row still belongs to the section
+                continue
+            if heading:
+                # "Current liabilities 8,002.68 8,354.75": the heading carries the total
+                items.append(LineItem(label="total " + _heading_key(norm), figures=figures, page=page["page"],
+                                      context=context, raw=raw, source="heading_total"))
                 continue
             items.append(LineItem(label=label, figures=figures, page=page["page"],
-                                  context=context, raw=line.strip()))
+                                  context=context, raw=raw))
+            if not norm.startswith("total") and first is not None:
+                section_sum += first
+                section_n += 1
+    items.extend(subtotals.values())
     return items
 
 
@@ -375,8 +508,13 @@ FIELD_PATTERNS: list[tuple[str, str | None, str, int]] = [
     ("current_assets", None, r"total\s+current\s+assets\b", 100),
     ("non_current_assets", None, r"total\s+non[\s-]*current\s+assets\b", 100),
     ("inventories", None, r"inventor(?:y|ies)\b", 90),
-    ("cash_and_equivalents", None, r"cash\s+and\s+cash\s+equivalents\b", 100),
-    ("cash_and_equivalents", None, r"cash\s+and\s+bank\s+balances?\b", 60),
+    # not the cash-flow statement's opening balance or movement lines: "Cash and cash
+    # equivalents at the beginning of the year" in last year's column is the year
+    # before last (read that way on real reports)
+    ("cash_and_equivalents", None,
+     r"cash\s+and\s+cash\s+equivalents?\b(?!.*\b(?:beginning|opening|increase|decrease|change|movement)\b)", 100),
+    ("cash_and_equivalents", None,
+     r"cash\s+and\s+bank\s+balances?\b(?!.*\b(?:beginning|opening|increase|decrease|change|movement)\b)", 60),
     # --- balance sheet: equity
     ("total_equity", None, r"total\s+equity\b(?!\s+and\s+liabilit)", 100),
     ("total_equity", None, r"total\s+shareholders?'?\s+funds?\b", 90),
@@ -407,8 +545,14 @@ FIELD_PATTERNS: list[tuple[str, str | None, str, int]] = [
     ("finance_costs", None, r"interest\s+(?:expense|and\s+finance\s+charges)\b", 80),
     ("depreciation", None, r"depreciation(?:\s*,?\s*(?:depletion\s*)?and\s+amorti[sz]ation)?", 100),
     # "before taxation" is standard older Indian wording and must match too
-    ("pbt", None, r"(?:profit|loss)\s*/?\s*\(?(?:loss|profit)?\)?\s*before\s+tax(?:ation)?\b", 100),
-    ("pbt", None, r"(?:profit|loss)[^\n]{0,40}before\s+(?:exceptional[^\n]{0,30})?tax(?:ation)?\b", 80),
+    # Schedule III prints "Profit before exceptional items and tax" (V) above
+    # "Profit before tax" (VII). Only VII is PBT: a label that still mentions the
+    # exceptional items is the line before them (found on real reports, where it
+    # replaced a loss of 28.85 cr with a profit of 74.50 cr).
+    ("pbt", None, r"(?:profit|loss)\s*/?\s*\(?(?:loss|profit)?\)?\s*before\s+tax(?:ation)?\b(?![^\n]*exceptional)", 100),
+    ("pbt", None, r"(?:profit|loss)[^\n]{0,40}before\s+tax(?:ation)?\b(?![^\n]*exceptional)", 80),
+    ("pbt", None, r"(?:profit|loss)[^\n]{0,40}after\s+exceptional[^\n]{0,30}before\s+tax(?:ation)?\b", 90),
+    ("pbt", None, r"(?:profit|loss)[^\n]{0,40}before\s+tax(?:ation)?\s+(?:and|but)\s+after\s+exceptional", 95),
     ("net_profit", None, r"(?:profit|loss)\s*/?\s*\(?(?:loss|profit)?\)?\s*for\s+the\s+(?:year|period)\b", 100),
     ("net_profit", None, r"(?:profit|loss)\s+after\s+tax\b", 90),
 ]
@@ -448,11 +592,16 @@ STANDARD_FIELDS = sorted(FIELD_STATEMENT)
 
 
 def _normalise_label(label: str) -> str:
-    s = label.lower().replace("&", "and")
+    s = strip_enumerator(label).lower().replace("&", "and")
     s = re.sub(r"\(.*?\)", " ", s)                       # "(refer note 7)"
     s = re.sub(r"[^a-z0-9\s/-]", " ", s)
+    s = re.sub(r"\s+-+\s+|^-+\s*|\s*-+$", " ", s)          # "TOTAL - ASSETS", "- Borrowings"
     s = re.sub(r"\bamortisation\b", "amortization", s)
     return re.sub(r"\s+", " ", s).strip()
+
+
+def _heading_key(norm: str) -> str:
+    return re.sub(r"\s+", " ", norm.replace("-", " ").replace("'", " ")).strip()
 
 
 def match_field(label: str, context: str | None = None,
@@ -483,8 +632,14 @@ def match_field(label: str, context: str | None = None,
     if best:
         return best
 
+    first_word = norm.split(" ", 1)[0]
     for fieldname, spellings in FIELD_SYNONYMS.items():
         for spelling in spellings:
+            # the first word must agree (OCR slips allowed): "Other current liabilities"
+            # scored 0.90 against "total current liabilities" and replaced the total with
+            # one of its components on real reports
+            if difflib.SequenceMatcher(None, first_word, spelling.split(" ", 1)[0]).ratio() < 0.75:
+                continue
             score = difflib.SequenceMatcher(None, norm, spelling).ratio()
             if score >= fuzzy_threshold and (best is None or score > best[1]):
                 best = (fieldname, round(score, 3), "fuzzy")
@@ -516,6 +671,9 @@ def map_statement(items: Iterable[LineItem], loc: StatementLocation) -> list[Fie
         if not matched:
             continue
         fieldname, score, how = matched
+        if item.source in ("subtotal", "bare_total", "heading_total"):
+            # read from layout, not from a printed label: an explicit label outranks it
+            score, how = min(score, 0.9), item.source
         for col, parsed in enumerate(item.figures):
             if not parsed.ok or col >= len(loc.period_fys):
                 continue
@@ -529,15 +687,28 @@ def map_statement(items: Iterable[LineItem], loc: StatementLocation) -> list[Fie
     return hits
 
 
+#: fields that may also be read off a statement other than their own
+_CROSS_STATEMENT_OK = {("cash_and_equivalents", "cash_flow")}
+
+
 def best_hits(hits: Iterable[FieldHit]) -> dict[tuple[str, int], FieldHit]:
     """Keep one hit per (field, fy): the most trustworthy, then the earliest page.
 
     Statements repeat figures (a total restated in the notes, a running header),
     so a rule is needed. Preferring the expected statement stops the cash-flow
     statement's closing cash line from overriding the balance sheet's.
+
+    A figure from the wrong statement is dropped altogether, except closing cash
+    from the cash flow statement: on real reports the cash flow's "Interest
+    expense" adjustment became finance costs and "Long term borrowings taken /
+    (repaid)" became long-term borrowings whenever the statement itself had not
+    been found - a movement filed as a balance.
     """
     chosen: dict[tuple[str, int], FieldHit] = {}
     for hit in hits:
+        expected = FIELD_STATEMENT.get(hit.field)
+        if hit.statement != expected and (hit.field, hit.statement) not in _CROSS_STATEMENT_OK:
+            continue
         key = (hit.field, hit.fy)
         current = chosen.get(key)
         if current is None or _hit_rank(hit) > _hit_rank(current):
