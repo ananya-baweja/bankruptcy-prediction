@@ -1,0 +1,8 @@
+# Keep line endings consistent between Windows and Colab/Linux checkouts,
+# so diffs show real changes instead of whole-file rewrites.
+* text=auto
+
+*.png binary
+*.pdf binary
+*.docx binary
+*.ipynb text eol=lf

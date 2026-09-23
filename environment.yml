@@ -1,0 +1,12 @@
+# Conda environment for local development (VS Code + Anaconda on Windows).
+# Create:   conda env create -f environment.yml
+# Activate: conda activate bpp
+name: bpp
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+      - -r requirements.txt
+      - -e .
