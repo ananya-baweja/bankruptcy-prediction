@@ -94,3 +94,9 @@ financials:
   scale_jump_factor: 8          # total assets moving by more than this -> suspect the unit
   required_fields: [total_assets, current_assets, current_liabilities, total_equity]
   spot_check_fraction: 0.10     # share of company-years put in the hand-check sheet
+
+# ---------------- Phase 4: language features (stream B) ---------------------
+language:
+  lm_order: 3          # n-gram order of the healthy-firm reference model
+  lm_discount: 0.75    # Kneser-Ney discount
+  lm_min_count: 2      # words rarer than this become <unk> during training
