@@ -72,6 +72,16 @@ class Paths:
         return self.manual / "xbrl_financials.csv"
 
     @property
+    def lm_dictionary(self) -> Path:
+        """Phase 4: the Loughran-McDonald dictionary, downloaded once by the team.
+
+        Not vendored: it is republished annually, and a silent copy in the repo
+        would make a tone result impossible to reproduce. See
+        ``docs/07_phase4_language.md``.
+        """
+        return self.manual / "loughran_mcdonald.csv"
+
+    @property
     def reviewed_matches(self) -> Path:
         return self.manual / "ibbi_listed_matches_reviewed.csv"
 
@@ -174,6 +184,12 @@ class Paths:
     @property
     def financials_missing(self) -> Path:
         return self.processed / "financials_missing.csv"
+
+    # ---- Phase 4: language features (stream B) ----
+    @property
+    def language_features(self) -> Path:
+        """One row per report: tone, hedging, readability, flags, drift, perplexity."""
+        return self.processed / "language_features.csv"
 
     def ensure(self) -> "Paths":
         """Create all folders (safe to call repeatedly)."""

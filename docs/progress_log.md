@@ -2,6 +2,57 @@
 
 What was done each working session, newest first. Keep entries short: what, result, next.
 
+## 2026-09-23 — Phase 4 stream B built (language features, `bpp language-features`)
+
+**Done**
+- `bpp language-features`, plus `src/bpp/nlp/{lexicon,readability,lm,drift,features}.py` and
+  `docs/07_phase4_language.md`.
+- Tone (Loughran-McDonald, seven categories), hedging density, an India/IBC distress phrase **seed**
+  list, Gunning Fog readability and length — computed for the **MD&A and the auditor's report
+  separately**, so the Phase 7 "MD&A only vs auditor only vs both" ablation is possible.
+- Auditor flags read from Phase 2's sections: going concern, emphasis of matter, opinion severity as
+  an ordinal, and the two CARO clauses that matter (loan default, unpaid statutory dues).
+- Perplexity under an interpolated **Kneser-Ney** model trained on healthy-firm MD&A, written here
+  because nltk is not a dependency. Left empty unless a training set is named, so the reference model
+  cannot be fitted across folds.
+- Year-on-year **drift** (contribution A): Jaccard, cosine, new-word share, and deltas in tone,
+  hedging and readability, always against the same firm's previous year.
+- `CORE_LANGUAGE_FEATURES` names the 25 values the model takes, matching Table 7; the table carries
+  more for the ablations. **The model code should read that list, not hard-code 25.**
+
+**Checked on synthetic data (not real results)**
+- 111 new tests pass. The whole suite is 314 passing.
+- An adversarial review was run again after the tests first came back green, and found 16 more
+  defects — the same lesson as Phase 3, that a green suite on clean fixtures proves very little.
+  The ones worth knowing:
+  - **Both CARO flags were 1.0 for every company.** A clean annexure says "has **not** defaulted",
+    "**Neither** the Company **nor** its promoters ... wilful defaulter" and "there are **no**
+    undisputed statutory dues outstanding"; some auditors also reproduce the Order's own wording,
+    "**whether** the company has defaulted ... if yes". Now judged clause by clause.
+  - **Fog was ~38 for any section of headings and bullets** — which is most PDF-extracted MD&A —
+    because the splitter needed a full stop and returned one sentence for the whole section.
+  - "going concern" in the distress seed list made `auditor_distress_phrase_density` constant: SA 570
+    puts it in every clean auditor's report.
+  - Drift was keyed on `(firm, fy)` while rows are per `doc_id`, so two documents in one firm-year
+    swapped drift; and a fiscal year stored as a string silently disabled drift for every row.
+  - Perplexity used raw counts at the lower orders, making it absolute discounting with a
+    Kneser-Ney unigram rather than Kneser-Ney, and an `order: 1` config gave every document the
+    same score.
+  - Hyphenated compounds ("non-performing") could never match the dictionary.
+  All fixed, each with a regression test in `tests/test_language_robustness.py`.
+
+**Not verified yet (needs real reports)**
+- Nothing here has met a real annual report, for the same reason as Phase 3.
+- The Loughran-McDonald dictionary has not been downloaded, so tone has only been exercised against
+  a small hand-written list. Someone must fetch it from sraf.nd.edu into `data/manual/`.
+- The distress phrase list is a **seed**, not contribution C's mined lexicon.
+
+**Next**
+1. Download the LM dictionary; note its version in `decisions_log.md`.
+2. After the first real batch: group every flag by `label` and confirm the classes differ. A
+   constant feature is the failure mode of this phase.
+3. Stream A (FinBERT), NER masking, coreference, SVO triplets and the mined lexicon — all Colab.
+
 ## 2026-09-23 — Phase 3 built (financial features, `bpp financials`)
 
 **Done**

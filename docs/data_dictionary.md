@@ -12,6 +12,7 @@ Conventions: `firm_id` = `BSE<scrip code>` (or `NSE_<symbol>`), `fy` = year the 
 | `firm_financials.csv` | `firm_id, company_name, fy, industry_code, total_assets` (+ `business_group`) | one row per firm-year; assets in ₹ crore for everyone |
 | `manual_reports.csv` | `firm_id, fy, local_path, pub_date, source_url, note` | `local_path` may be blank if the PDF follows the naming convention |
 | `listed_companies_extra.csv` | `company_name, bse_code, nse_symbol, isin, status, industry` | companies missing from the BSE/NSE lists |
+| `loughran_mcdonald.csv` | the Master Dictionary as published, or a simple `word,category` file | Phase 4 tone features. Downloaded once from sraf.nd.edu; **not** in the repo, because it is republished yearly and a silent copy makes a tone number irreproducible. Record the version in `decisions_log.md` |
 | `xbrl_financials.csv` | `firm_id, fy, field, value_cr, source_url, note` | Phase 3 gap-fill, step 2: figures typed in from NSE/BSE XBRL annual results, already in ₹ crore. One row per figure. Fills gaps only — never overrides a figure read from a report |
 
 ## Raw (`raw/`)
@@ -105,6 +106,33 @@ negative_ebitda, zero_finance_costs, negative_working_capital, negative_capital_
 `promoter_pledge` is empty until the exchange shareholding filings are collected. An empty ratio
 means it could not be computed honestly, not zero — `ratio_reasons` says why. Ratios are raw:
 winsorise and scale inside the CV folds.
+
+### `language_features.csv` — the stream-B table (Phase 4)
+One row per report. Per section, for `mdna_` and `auditor_` separately: `lm_negative_ratio`,
+`lm_positive_ratio`, `lm_uncertainty_ratio`, `lm_litigious_ratio`, `lm_strong_modal_ratio`,
+`lm_weak_modal_ratio`, `lm_constraining_ratio`, `hedge_density`, `hedge_distinct`,
+`hedge_phrase_density`, `distress_phrase_density`, `distress_phrase_distinct`, `fog_index`,
+`avg_sentence_length`, `complex_word_ratio`, `n_words`, `n_sentences`.
+
+| Column | Meaning |
+| --- | --- |
+| `doc_id, firm_id, fy` + `pair_id, role, label, horizon, included` | identifiers, carried from `documents_labeled.csv` |
+| `has_going_concern, has_emphasis_of_matter, has_modified_opinion_basis` | from Phase 2's auditor sub-sections |
+| `audit_opinion_severity` | 0 unmodified, 1 qualified, 2 adverse, 3 disclaimer; empty when the opinion could not be read |
+| `audit_opinion_found` | whether the opinion was identified at all |
+| `caro_default_flag, caro_statutory_dues_flag` | CARO clauses ix and vii, **negation-aware** — a clean annexure denies default, so a naive match is 1 for every company |
+| `has_mdna, has_auditor_report, has_caro_annexure` | section coverage |
+| `ibc_generic_mentions, cirp_specific_mentions` | leakage counts from Phase 2 |
+| `perplexity` | under the healthy-firm reference model; empty unless a training set was named |
+| `perplexity_source` | `fold_training_set` or `not_fitted_no_training_set_given` |
+| `perplexity_in_training` | 1 when the document was itself used to fit the model, so its score is optimistic |
+| `drift_jaccard, drift_cosine, drift_new_word_share, drift_length_ratio` | MD&A against the **same firm's** previous year |
+| `drift_negative_delta, drift_hedge_delta, drift_fog_delta` | change in tone, hedging and readability |
+| `has_previous_year, drift_previous_doc_id` | whether a prior report existed, and which one was used |
+
+Tone columns are **empty, not zero**, when no dictionary was supplied. Drift is empty for a firm's
+first year. `CORE_LANGUAGE_FEATURES` in `nlp/features.py` names the 25 values the model is trained
+on; the rest are kept for the Phase 7 ablations.
 
 ### `financials_missing.csv`
 the `financials_extracted.csv` rows where `financials_missing` is True
