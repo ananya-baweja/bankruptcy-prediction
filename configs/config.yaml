@@ -1,0 +1,83 @@
+# ---------------------------------------------------------------------------
+# Central configuration for the Bankruptcy Prediction Project (bpp).
+# Every command reads this file. Change values here, not in code.
+# Override the data folder without editing this file by setting the
+# environment variable BPP_DATA_DIR (useful on Colab: point it at Google Drive),
+# or pass --data-dir to any bpp command.
+# ---------------------------------------------------------------------------
+
+paths:
+  data_dir: data            # relative to the project root, or an absolute path
+
+# Indian fiscal year: FY2023 = 1 Apr 2022 to 31 Mar 2023 (labelled by the year it ends)
+fiscal_year:
+  end_month: 3
+  end_day: 31
+
+# ---------------- Phase 1: IBBI public announcements ----------------------
+ibbi:
+  url: https://ibbi.gov.in/en/public-announcement
+  request_delay_s: 2.0        # be polite: wait between page requests
+  timeout_s: 30
+  max_pages: null             # null = scrape until an empty page / earliest_date
+  earliest_date: 2016-12-01   # IBC CIRP provisions came into force on 1 Dec 2016
+  cirp_type_keyword: corporate insolvency resolution   # matched case-insensitively against "Type of PA"
+
+# ---------------- Phase 1: listed-company universe --------------------------
+listed:
+  bse_api: https://api.bseindia.com/BseIndiaAPI/api
+  bse_statuses: [Active, Suspended, Delisted]   # IBC firms are often suspended/delisted
+  nse_equity_list_url: https://nsearchives.nseindia.com/content/equities/EQUITY_L.csv
+  request_delay_s: 2.0
+  timeout_s: 30
+
+# ---------------- Phase 1: matching IBBI debtor names to listed firms -------
+name_matching:
+  auto_accept_score: 98       # rapidfuzz token_sort_ratio at or above this -> auto accepted
+  review_score: 80            # between review_score and auto_accept_score -> a human checks
+  top_k_candidates: 3
+
+# ---------------- Phase 1: cohort + healthy peer matching -------------------
+cohort:
+  n_years_before: 3           # t-1, t-2, t-3 reports per firm
+  n_candidate_years: 4        # one spare year, because the latest report is often excluded (leakage)
+  min_financial_years: 3      # distressed firm needs this many FYs of financials before admission
+  earliest_admission: 2017-06-01
+  latest_admission: null      # null = no upper limit
+  peers_per_distressed: 1     # 1 = balanced 1:1 cohort
+  asset_tolerance: 0.30       # healthy peer total assets within +/-30% of the distressed firm
+  industry_column: industry_code
+  industry_fallback_prefix_len: 2   # if no exact-industry peer, match on the first N chars of the code
+  random_seed: 42
+
+# ---------------- Phase 2: labels and leakage rules -------------------------
+labels:
+  assumed_publication_lag_days: 183   # if the real publication date is unknown: FY end + ~6 months
+  exclude_within_days_of_admission: 180   # drop reports published this close to (or after) admission
+  keep_pairs_aligned: true            # if a distressed firm's FY is dropped, drop the peer's same FY too
+  horizon_months: [12, 24]
+
+# ---------------- Phase 2: annual report download ---------------------------
+reports:
+  sources: [nse, bse]         # tried in this order; manual files always take priority
+  request_delay_s: 3.0
+  timeout_s: 60
+  bse_annual_report_endpoint: AnnualReport_New/w   # UNVERIFIED - test on one scrip code first
+  bse_pdf_base: https://www.bseindia.com/bseplus/AnnualReport
+  user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+
+# ---------------- Phase 2: text + section extraction ------------------------
+extraction:
+  min_chars_per_page: 50      # below this a page is treated as scanned -> OCR
+  ocr:
+    enabled: true
+    dpi: 300
+    lang: eng
+    tesseract_cmd: null       # Windows example: "C:/Program Files/Tesseract-OCR/tesseract.exe"
+  min_section_chars: 1500     # shorter "sections" are treated as sub-headings / cross references
+  toc_max_page: 15            # table-of-contents pages are only looked for in the first N pages
+  toc_min_distinct_sections: 3
+
+qa:
+  sample_size: 30
+  random_seed: 7

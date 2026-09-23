@@ -1,0 +1,32 @@
+# Phases 0-2 (setup, cohort building, document collection & extraction)
+# Install with:  pip install -r requirements.txt  then  pip install -e .
+pandas>=2.0
+numpy>=1.24
+pyyaml>=6.0
+requests>=2.31
+beautifulsoup4>=4.12
+lxml>=4.9
+rapidfuzz>=3.0
+pymupdf>=1.23
+pillow>=10.0
+pytesseract>=0.3.10   # also needs the Tesseract program installed (see docs/01_setup.md)
+tqdm>=4.66
+nse>=1.0              # unofficial NSE India client, used to list/download annual reports
+
+# Development
+pytest>=7.4
+nbformat>=5.9
+ipykernel>=6.25
+
+# Later phases (install when you get there; heavy, mostly used on Colab)
+# spacy>=3.7            # + python -m spacy download en_core_web_trf
+# fastcoref>=2.1
+# nltk>=3.8
+# transformers>=4.40
+# sentence-transformers>=2.7
+# torch>=2.2
+# scikit-learn>=1.4
+# xgboost>=2.0
+# optuna>=3.6
+# shap>=0.45
+# captum>=0.7

@@ -1,0 +1,47 @@
+# ---------------------------------------------------------------
+# Data never goes into git. It lives in the shared Google Drive folder.
+# The only exceptions are the blank CSV templates and the folder markers,
+# which the pipeline and the docs refer to.
+# ---------------------------------------------------------------
+data/raw/**
+data/interim/**
+data/processed/**
+data/manual/*
+data_demo/
+*.pdf
+.env
+
+!data/raw/*/
+!data/**/.gitkeep
+!data/manual/*_TEMPLATE.csv
+!data/manual/README.md
+
+# ---------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ipynb_checkpoints/
+.venv/
+venv/
+
+# Models, logs, caches
+models/
+runs/
+*.log
+.cache/
+nse_cookies/
+
+# ---------------------------------------------------------------
+# OS and editors
+# ---------------------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/*
+!.vscode/settings.json

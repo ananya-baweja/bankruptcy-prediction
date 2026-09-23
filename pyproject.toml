@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bpp"
+version = "0.1.0"
+description = "Multimodal bankruptcy prediction for Indian listed firms (IBC/NCLT) from annual-report text and financial ratios"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pandas>=2.0",
+    "numpy>=1.24",
+    "pyyaml>=6.0",
+    "requests>=2.31",
+    "beautifulsoup4>=4.12",
+    "lxml>=4.9",
+    "rapidfuzz>=3.0",
+    "pymupdf>=1.23",
+    "pillow>=10.0",
+    "pytesseract>=0.3.10",
+    "tqdm>=4.66",
+]
+
+[project.optional-dependencies]
+scrape = ["nse>=1.0"]
+dev = ["pytest>=7.4", "nbformat>=5.9", "ipykernel>=6.25"]
+
+[project.scripts]
+bpp = "bpp.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
