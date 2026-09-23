@@ -20,6 +20,7 @@ What gets generated
 from __future__ import annotations
 
 import random
+import re
 from pathlib import Path
 from typing import Any
 
@@ -180,8 +181,205 @@ class _PdfWriter:
         self.doc.save(path)
 
 
+# ----------------------------------------------------------------------------- statements
+# Phase 3 reads the standalone balance sheet, statement of profit and loss and
+# cash flow statement. The one-page stub further down is enough for Phase 2
+# (which only needs a heading to end the auditor's report at), but not for
+# testing extraction: that needs a prior-year column, a stated unit, bracketed
+# negatives, a note column, Schedule III sub-headings and a consolidated set to
+# be discriminated against. Built as text so the figures can be tested without
+# rendering a PDF; ``write_report_pdf`` puts them on pages.
+
+
+def _fmt(value: float, indian: bool = False) -> str:
+    """Format a figure the way a statement prints it: grouped, brackets if negative."""
+    negative = value < 0
+    body = f"{abs(value):,.2f}"
+    if indian:                       # 12,34,567.89 rather than 1,234,567.89
+        whole, _, frac = body.replace(",", "").partition(".")
+        if len(whole) > 3:
+            head, tail = whole[:-3], whole[-3:]
+            head = re.sub(r"(?<=\d)(?=(\d{2})+$)", ",", head)
+            whole = f"{head},{tail}"
+        body = f"{whole}.{frac}"
+    return f"({body})" if negative else body
+
+
+#: the year a distressed firm's decline bottoms out, so a firm-year's figures
+#: are the same number whichever report they are read from
+TREND_REFERENCE_FY = 2019
+
+
+def year_figures(fy: int, distressed: bool, seed: int = 0) -> dict[str, float]:
+    """Figures for one fiscal year, in ₹ crore, balancing exactly.
+
+    A company-year always produces the same numbers, whether it is read as a
+    report's own year or as the next report's comparative column. That matters:
+    if the fixture drifted between the two, every year would look restated and
+    the restatement test could never fail. Restatements are introduced
+    deliberately, by :func:`statement_figures`.
+    """
+    rng = random.Random(f"{seed}|{fy}|{int(distressed)}")
+    years_out = max(0, TREND_REFERENCE_FY - fy)      # 0 = the worst year
+    jitter = rng.uniform(0.98, 1.02)
+
+    if distressed:
+        equity_share = -0.20 + 0.22 * min(years_out, 2)      # 2017 +0.24, 2018 +0.02, 2019 -0.20
+        size = 1.0 + 0.06 * min(years_out, 3)                 # shrinking as trouble builds
+    else:
+        equity_share, size = 0.60, 1.0 - 0.04 * min(years_out, 3)
+
+    total_assets = round(7800 * size * jitter, 2)
+    current_assets = round(total_assets * 0.36, 2)
+    equity = round(total_assets * equity_share, 2)
+    non_current_liabilities = round(total_assets * (0.52 if distressed else 0.16), 2)
+    current_liabilities = round(total_assets - equity - non_current_liabilities, 2)
+    borrowings_short = round(current_liabilities * 0.51, 2)
+    share_capital = 450.00
+
+    revenue = round(total_assets * (0.41 if distressed else 0.80), 2)
+    other_income = round(revenue * 0.014, 2)
+    finance_costs = round(total_assets * (0.078 if distressed else 0.012), 2)
+    depreciation = round(total_assets * 0.048, 2)
+    other_expenses = round(revenue * (0.94 if distressed else 0.74), 2)
+    total_income = round(revenue + other_income, 2)
+    total_expenses = round(other_expenses + finance_costs + depreciation, 2)
+    pbt = round(total_income - total_expenses, 2)
+    tax = round(max(pbt, 0.0) * 0.26, 2)
+
+    return {
+        "fy": fy,
+        "total_assets": total_assets,
+        "current_assets": current_assets,
+        "non_current_assets": round(total_assets - current_assets, 2),
+        "inventories": round(current_assets * 0.42, 2),
+        "cash": round(current_assets * (0.031 if distressed else 0.17), 2),
+        "other_bank": round(current_assets * 0.005, 2),
+        "share_capital": share_capital,
+        "other_equity": round(equity - share_capital, 2),
+        "total_equity": equity,
+        "borrowings_long": non_current_liabilities,
+        "non_current_liabilities": non_current_liabilities,
+        "borrowings_short": borrowings_short,
+        "trade_payables": round(current_liabilities - borrowings_short, 2),
+        "current_liabilities": current_liabilities,
+        "revenue": revenue,
+        "other_income": other_income,
+        "total_income": total_income,
+        "other_expenses": other_expenses,
+        "finance_costs": finance_costs,
+        "depreciation": depreciation,
+        "total_expenses": total_expenses,
+        "pbt": pbt,
+        "tax": tax,
+        "net_profit": round(pbt - tax, 2),
+    }
+
+
+def statement_figures(fy: int, distressed: bool, seed: int = 0,
+                      restate_prior: float = 0.0) -> dict[str, dict[str, float]]:
+    """The current and prior-year columns one report prints.
+
+    ``restate_prior`` multiplies the comparative column, to simulate a company
+    restating last year's figures -- which is what the restatement flag exists
+    to catch.
+    """
+    current = year_figures(fy, distressed, seed)
+    prior = year_figures(fy - 1, distressed, seed)
+    if restate_prior:
+        prior = {k: (round(v * (1 + restate_prior), 2) if k != "fy" else v)
+                 for k, v in prior.items()}
+    return {"current": current, "prior": prior}
+
+
+def statement_pages(company: str, fy: int, distressed: bool, seed: int = 0,
+                    unit: str = "crore", restate_prior: float = 0.0) -> list[str]:
+    """Page texts for the standalone statements, then a consolidated balance sheet."""
+    figures = statement_figures(fy, distressed, seed, restate_prior)
+    cur, pri = figures["current"], figures["prior"]
+    scale = {"crore": 1.0, "lakh": 100.0, "million": 10.0}[unit]
+    caption = {"crore": "(All amounts in Rs. crore, unless otherwise stated)",
+               "lakh": "(Rs. in lakhs)",
+               "million": "(All amounts in INR million)"}[unit]
+    indian = unit == "lakh"
+
+    def row(label: str, key: str, note: str = "") -> str:
+        return (f"{label} {note} {_fmt(cur[key] * scale, indian)} "
+                f"{_fmt(pri[key] * scale, indian)}").replace("  ", " ")
+
+    balance_sheet = "\n".join([
+        f"STANDALONE BALANCE SHEET AS AT 31ST MARCH, {fy}",
+        caption,
+        f"Particulars Note As at 31 March {fy} As at 31 March {fy - 1}",
+        "ASSETS",
+        "Non-current assets",
+        row("Property, plant and equipment", "non_current_assets", "3"),
+        row("Total non-current assets", "non_current_assets"),
+        "Current assets",
+        row("Inventories", "inventories", "7"),
+        row("Cash and cash equivalents", "cash", "9"),
+        row("Bank balances other than cash and cash equivalents", "other_bank", "10"),
+        row("Total current assets", "current_assets"),
+        row("Total assets", "total_assets"),
+        "EQUITY AND LIABILITIES",
+        "Equity",
+        row("Equity share capital", "share_capital", "13"),
+        row("Other equity", "other_equity", "14"),
+        row("Total equity", "total_equity"),
+        "Non-current liabilities",
+        row("Borrowings", "borrowings_long", "15"),
+        row("Total non-current liabilities", "non_current_liabilities"),
+        "Current liabilities",
+        row("Borrowings", "borrowings_short", "18"),
+        row("Trade payables", "trade_payables", "19"),
+        row("Total current liabilities", "current_liabilities"),
+        row("Total equity and liabilities", "total_assets"),
+    ])
+
+    profit_and_loss = "\n".join([
+        f"STANDALONE STATEMENT OF PROFIT AND LOSS FOR THE YEAR ENDED 31ST MARCH, {fy}",
+        caption,
+        f"Particulars Note Year ended 31 March {fy} Year ended 31 March {fy - 1}",
+        row("Revenue from operations", "revenue", "21"),
+        row("Other income", "other_income", "22"),
+        row("Total income", "total_income"),
+        row("Other expenses", "other_expenses", "23"),
+        row("Finance costs", "finance_costs", "25"),
+        row("Depreciation and amortisation expense", "depreciation", "26"),
+        row("Total expenses", "total_expenses"),
+        row("Profit/(loss) before tax", "pbt"),
+        row("Tax expense", "tax"),
+        row("Profit/(loss) for the year", "net_profit"),
+    ])
+
+    cash_flow = "\n".join([
+        f"STANDALONE CASH FLOW STATEMENT FOR THE YEAR ENDED 31ST MARCH, {fy}",
+        caption,
+        f"Particulars Year ended 31 March {fy} Year ended 31 March {fy - 1}",
+        row("Profit/(loss) before tax", "pbt"),
+        row("Depreciation and amortisation expense", "depreciation"),
+        row("Finance costs", "finance_costs"),
+        row("Cash and cash equivalents at the end of the year", "cash"),
+    ])
+
+    # The consolidated set repeats every heading with different totals, so the
+    # extractor has to prefer the standalone one rather than the first it meets.
+    consolidated = "\n".join([
+        f"CONSOLIDATED BALANCE SHEET AS AT 31ST MARCH, {fy}",
+        caption,
+        f"Particulars Note As at 31 March {fy} As at 31 March {fy - 1}",
+        f"Total assets {_fmt(cur['total_assets'] * 1.38 * scale, indian)} "
+        f"{_fmt(pri['total_assets'] * 1.38 * scale, indian)}",
+        f"Total equity {_fmt(cur['total_equity'] * 1.22 * scale, indian)} "
+        f"{_fmt(pri['total_equity'] * 1.22 * scale, indian)}",
+    ])
+
+    return [balance_sheet, profit_and_loss, cash_flow, consolidated]
+
+
 def write_report_pdf(path: Path, company: str, fy: int, distressed: bool, mention_cirp: bool,
-                     scanned_mdna_page: bool, seed: int) -> None:
+                     scanned_mdna_page: bool, seed: int,
+                     financial_statements: bool = False, statement_unit: str = "crore") -> None:
     rng = random.Random(seed)
     tone = DISTRESS_SENTENCES if distressed else HEALTHY_SENTENCES
     yr = f"{fy - 1}-{str(fy)[2:]}"
@@ -259,8 +457,13 @@ def write_report_pdf(path: Path, company: str, fy: int, distressed: bool, mentio
     w.flow("ANNEXURE 'B' TO THE INDEPENDENT AUDITORS' REPORT",
            "Report on the Internal Financial Controls under Clause (i) of Sub-section 3 of Section 143 of the "
            "Companies Act, 2013\n\n" + _paras(rng, NEUTRAL_SENTENCES, 4))
-    w.page(f"STANDALONE BALANCE SHEET AS AT 31ST MARCH, {fy}\n\n(Rs. in crore)\n\nASSETS\nNon-current assets\n"
-           "Property, plant and equipment 1,234.5\nCurrent assets\nInventories 345.6\nTotal assets 2,468.1")
+    if financial_statements:
+        # full Schedule III statements, for Phase 3 extraction
+        for page_text in statement_pages(company, fy, distressed, seed, statement_unit):
+            w.page(page_text)
+    else:
+        w.page(f"STANDALONE BALANCE SHEET AS AT 31ST MARCH, {fy}\n\n(Rs. in crore)\n\nASSETS\nNon-current assets\n"
+               "Property, plant and equipment 1,234.5\nCurrent assets\nInventories 345.6\nTotal assets 2,468.1")
     w.flow("INDEPENDENT AUDITOR'S REPORT",
            f"To the Members of {company}\n\nReport on the Audit of the Consolidated Financial Statements\n\n"
            "Opinion\n\nWe have audited the consolidated financial statements of the Holding Company and its "

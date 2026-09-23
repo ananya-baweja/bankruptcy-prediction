@@ -11,6 +11,12 @@ pymupdf>=1.23
 pillow>=10.0
 pytesseract>=0.3.10   # also needs the Tesseract program installed (see docs/01_setup.md)
 tqdm>=4.66
+
+# Phase 3 (financial statements -> ratios). Both are optional: the text walk in
+# features/statements.py works without them, and they only improve accuracy on
+# ruled tables. camelot additionally needs opencv, which it pulls in itself.
+pdfplumber>=0.11
+camelot-py>=1.0
 nse>=1.0              # unofficial NSE India client, used to list/download annual reports
 
 # Development

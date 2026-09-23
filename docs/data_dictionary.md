@@ -12,6 +12,7 @@ Conventions: `firm_id` = `BSE<scrip code>` (or `NSE_<symbol>`), `fy` = year the 
 | `firm_financials.csv` | `firm_id, company_name, fy, industry_code, total_assets` (+ `business_group`) | one row per firm-year; assets in ₹ crore for everyone |
 | `manual_reports.csv` | `firm_id, fy, local_path, pub_date, source_url, note` | `local_path` may be blank if the PDF follows the naming convention |
 | `listed_companies_extra.csv` | `company_name, bse_code, nse_symbol, isin, status, industry` | companies missing from the BSE/NSE lists |
+| `xbrl_financials.csv` | `firm_id, fy, field, value_cr, source_url, note` | Phase 3 gap-fill, step 2: figures typed in from NSE/BSE XBRL annual results, already in ₹ crore. One row per figure. Fills gaps only — never overrides a figure read from a report |
 
 ## Raw (`raw/`)
 
@@ -37,6 +38,8 @@ Conventions: `firm_id` = `BSE<scrip code>` (or `NSE_<symbol>`), `fy` = year the 
 | `extraction_report.csv` | `<section>_chars` per section, `n_ocr_pages`, `audit_opinion`, `auditor_scope`, leakage counts, `warnings` |
 | `qa/section_qa_sheet.csv` | predicted pages/heading/snippets + `found_correct, start_correct, end_correct, true_start_page, true_end_page, notes` |
 | `qa/section_qa_scores.csv` | per section: `n_checked, found_accuracy, start_accuracy, end_accuracy, exact_span_accuracy` |
+| `qa/financials_spot_check.csv` | a random 10% of company-years x every extracted field: `firm_id, fy, field, value_cr, source, source_doc_id, page, statement, label, printed, unit, confidence, parse_flags` + `value_correct, page_correct, true_value_cr, notes` to fill in |
+| `qa/financials_spot_check_scores.csv` | per field: `n_checked, value_accuracy, page_accuracy` |
 
 ## Processed (`processed/`)
 
@@ -59,6 +62,52 @@ Conventions: `firm_id` = `BSE<scrip code>` (or `NSE_<symbol>`), `fy` = year the 
 | `within_12m, within_24m` | distressed and published ≤12 / ≤24 months before admission |
 | `has_<section>, audit_opinion, cirp_specific_mentions, ibc_generic_mentions` | from section extraction |
 | `needs_leakage_review` | distressed, included, and mentions CIRP terms → read it |
+
+### `financials_figures.csv` — one row per extracted figure (Phase 3 audit trail)
+`firm_id, fy, field, value_cr, source (report_current_year | next_report_comparative | manual_xbrl),
+source_doc_id, page, statement, statement_scope, label, match_how, match_score, unit,
+unit_confidence, printed, parse_confidence, parse_flags, ocr_pages, restated, restatement_diff,
+has_comparative, validation_flags, confidence`
+
+`value_cr` is ₹ crore; `printed` is the figure as the report showed it, in `unit`. `restated` means
+the next year's comparative disagreed with the figure as first published — the first-published one
+is kept either way.
+
+### `financials_extracted.csv` — one row per company-year
+The standard fields (`total_assets, current_assets, current_liabilities, inventories,
+cash_and_equivalents, non_current_assets, non_current_liabilities, borrowings_long_term,
+borrowings_short_term, total_equity, equity_share_capital, other_equity, retained_earnings,
+total_liabilities, total_equity_and_liabilities, revenue, total_income, pbt, finance_costs,
+depreciation, net_profit`),
+all in ₹ crore, plus:
+
+| Column | Meaning |
+| --- | --- |
+| `pair_id, role, label, horizon, company_name` | carried from `documents_labeled.csv` |
+| `balance_check, components_check` | relative gap in the two balance-sheet identities (0 = exact) |
+| `scale_vs_cohort, scale_vs_previous_year` | total assets against the two unit-scale anchors |
+| `validation_flags, n_validation_flags` | see `docs/06_phase3_financials.md` |
+| `missing_fields, n_fields_found, has_core_financials` | what was and was not recovered |
+| `financials_source` | `report_current_year` / `next_report_comparative` / `manual_xbrl` / `missing` |
+| `financials_missing` | True when a required field is absent — the row is still kept |
+| `financials_exclude_reason` | blank, `missing_financials`, or `pair_partner_missing_financials` |
+| `included_financials` | True for rows usable in modelling |
+
+### `ratios.csv` — the stream-C table
+`firm_id, fy` + the 12 ratios (`current_ratio, quick_ratio, cash_to_assets, ebitda_margin, roce,
+roa, debt_to_equity, debt_to_ebitda, interest_coverage, retained_earnings_to_assets,
+promoter_pledge, altman_z_em`), plus `altman_z_dprime` (the same score without Altman's +3.25
+rating-equivalent constant) and `altman_zone (safe|grey|distress)`, which is read off
+`altman_z_dprime`. Then the condition indicators (`borrowings_partial, negative_equity,
+negative_ebitda, zero_finance_costs, negative_working_capital, negative_capital_employed`),
+`ratio_reasons`, and the identifiers carried from `financials_extracted.csv`.
+
+`promoter_pledge` is empty until the exchange shareholding filings are collected. An empty ratio
+means it could not be computed honestly, not zero — `ratio_reasons` says why. Ratios are raw:
+winsorise and scale inside the CV folds.
+
+### `financials_missing.csv`
+the `financials_extracted.csv` rows where `financials_missing` is True
 
 ### `missing_reports.csv`
 `pair_id, firm_id, company_name, role, fy, expected_pub_date`
