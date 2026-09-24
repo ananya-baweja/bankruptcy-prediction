@@ -300,7 +300,7 @@ _CELL_TOKEN = re.compile(
     r"|[-−]?\d[\d,]*(?:\.\d+)?(?:\)(?![\w(]))?"            # 1,204.55 / -88.12 / 7,519) (OCR lost "(")
     r")"
     r"|(?P<nil>"
-    r"(?<![\w-])(?:-{1,3}|–|—|―)(?![\w-])"       # a standalone dash
+    r"(?<![\w-])(?:-{1,3}|–|—|―)(?![\w-])(?!\s*[A-Za-z])"   # a standalone dash (not "Non - Current")
     r"|\bnil\b|\bn\.a\.|\bn/a\b"
     r")",
     re.I,

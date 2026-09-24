@@ -83,7 +83,10 @@ def extract_document(pages_json: dict[str, Any], cfg: dict[str, Any],
         items = parse_statement_lines(pages, loc)
 
         # Ruled tables give real column geometry; use them when they add rows.
-        if fcfg["use_table_extraction"] and pdf_path:
+        # A statement whose pages were all OCR'd has no text layer for a table reader
+        # to find (camelot only warns, page after page, and the run takes minutes longer).
+        n_pages = loc.end_page - loc.start_page + 1
+        if fcfg["use_table_extraction"] and pdf_path and loc.ocr_pages < n_pages:
             rows = extract_table_rows(pdf_path, range(loc.start_page, loc.end_page + 1),
                                       flavours=fcfg["table_flavours"])
             table_items = rows_to_line_items(rows, loc)
@@ -688,6 +691,53 @@ def _looks_like_unit_confusion(ratio: float, tolerance: float = 0.15) -> bool:
 
 
 # --------------------------------------------------------------------------- the pipeline
+#: a missing total, and the definitional identity that gives it from figures that were read
+_DERIVATIONS: list[tuple[str, tuple[str, ...], tuple[str, ...]]] = [
+    # (field, added, subtracted)
+    ("total_equity", ("equity_share_capital", "other_equity"), ()),
+    ("total_equity_and_liabilities", ("total_assets",), ()),
+    ("total_assets", ("total_equity_and_liabilities",), ()),
+    ("total_assets", ("non_current_assets", "current_assets"), ()),
+    ("current_assets", ("total_assets",), ("non_current_assets",)),
+    ("non_current_assets", ("total_assets",), ("current_assets",)),
+    ("current_liabilities", ("total_equity_and_liabilities",), ("total_equity", "non_current_liabilities")),
+    ("non_current_liabilities", ("total_equity_and_liabilities",), ("total_equity", "current_liabilities")),
+]
+
+
+def derive_missing_totals(wide: pd.DataFrame) -> pd.DataFrame:
+    """Fill a missing balance-sheet total from its definition when every input was read.
+
+    Current assets = total assets - non-current assets; total equity = share capital
+    + other equity; and so on - the way a database such as Prowess completes a
+    statement. Only a missing value is filled, never a read one, and every filled
+    field is listed in ``derived_fields`` so it can be traced and left out.
+    """
+    if wide.empty:
+        return wide
+    out = wide.copy()
+    derived_col = []
+    for i, r in out.iterrows():
+        vals = {k: r.get(k) for k in out.columns}
+        done: list[str] = []
+        for _ in range(2):                       # a second pass uses what the first derived
+            for field, plus, minus in _DERIVATIONS:
+                if field not in out.columns or pd.notna(vals.get(field)):
+                    continue
+                inputs = [vals.get(f) for f in plus + minus]
+                if any(v is None or pd.isna(v) for v in inputs):
+                    continue
+                vals[field] = sum(float(vals[f]) for f in plus) - sum(float(vals[f]) for f in minus)
+                out.at[i, field] = vals[field]
+                done.append(field)
+        derived_col.append(";".join(dict.fromkeys(done)))
+    out["derived_fields"] = derived_col
+    n = sum(1 for d in derived_col if d)
+    if n:
+        log.info("%d company-years had a missing total filled from its definition", n)
+    return out
+
+
 _ASSET_COMPONENTS = ("cash_and_equivalents", "inventories", "current_assets", "non_current_assets")
 
 
@@ -737,7 +787,7 @@ def build_financials(paths: Paths, cfg: dict[str, Any],
         wanted = set(zip(scope["firm_id"].astype(str), scope["fy"].astype(int)))
         exchange = exchange[[(str(f), int(y)) in wanted for f, y in zip(exchange["firm_id"], exchange["fy"])]]
     resolved, audit = resolve_figures(figures, load_xbrl_supplement(paths), cfg, exchange)
-    wide = to_wide(resolved)
+    wide = derive_missing_totals(to_wide(resolved))
 
     # --- validation, per company-year
     anchor_lookup: dict[tuple[str, int], float] = {}

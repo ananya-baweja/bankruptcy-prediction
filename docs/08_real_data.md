@@ -62,8 +62,34 @@ kept); PDFs are saved as `raw/annual_reports/<firm_id>/FY<year>.pdf`, the layout
   balance sheet.
 - **BSE's industry classification is empty for many delisted companies**, and filing dates are
   missing for almost every report before FY2023 (the FY end + 183 days rule applies).
-- **One annual report was 229 MB** (a scanned FY2018 report) and could not be moved to the processing
-  session in the time allowed per transfer.
+- **One annual report was 229 MB** (a scanned FY2018 report), too large to move in one transfer. The
+  agent (1.5) can now cut a file into numbered parts (`split` items); the processing session joins
+  them and checks the SHA-256.
+- **A download can stop early and still say HTTP 200.** One report arrived as 98 KB of 3.9 MB. The
+  agent (1.4) keeps a file only when it matches `Content-Length` and a PDF ends with `%%EOF`.
+- **An XBRL filing can repeat last year's profit and loss** to the rupee (with the current year typed
+  into the quarter column). Such filings are not used for flow figures.
+- **XBRL and the report disagree on some balance-sheet lines** in both directions. The value that
+  makes the balance sheet add up is kept.
+- **Older reports (FY2016-2017, pre-Ind AS) print no section totals**, only one `Total` per side.
+  Section totals are built by adding the rows and kept only when both sides balance to rounding.
+- **Contents and corporate-information pages look like statements** to a figure counter (PIN codes,
+  phone numbers, page references). Headings must end in a date, and contents entries are ignored.
+- **The CARO annexure is missed in about a third of reports** by the Phase 2 section extractor even
+  though they contain it. Fixing it is a Phase 2 change and waits for the team's approval.
+
+## Pilot results (27 pairs, 24 Sep 2026)
+
+| | |
+| --- | --- |
+| Reports read | 210 (23,636 pages, 1,624 OCR'd), no failures |
+| Insolvent firms confirmed by the CIN in their own report | 27 of 27 |
+| Company-years | 216: 140 from XBRL, 67 from the report, 7 from next year's report, 2 missing |
+| Report reader vs XBRL, within 1% | 87.9% of 1,934 figures; 91.2% leaving out 6 reports detected as read at the wrong scale |
+| Unrecoverable company-years (a core figure missing) | distressed 10 of 108, healthy 9 of 108 - almost all FY2016-2018 |
+| Modelling rows | 160 included; 135 keep usable financials after the pair rule |
+
+`python scripts/pilot_report.py --data-dir D` writes the details to `interim/qa/pilot/`.
 
 ## Commands (processing session)
 
@@ -78,6 +104,7 @@ python scripts/exchange_pipeline.py --data-dir D manifest
 python scripts/process_reports.py --data-dir D text --workers 2
 python scripts/process_reports.py --data-dir D phases
 python scripts/process_reports.py --data-dir D cincheck
+python scripts/pilot_report.py --data-dir D
 ```
 
 `J` is the folder of job files copied into the laptop's `bpp-data\jobs\`.

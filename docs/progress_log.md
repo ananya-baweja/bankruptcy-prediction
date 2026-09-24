@@ -2,6 +2,58 @@
 
 What was done each working session, newest first. Keep entries short: what, result, next.
 
+## 2026-09-23/24 — Real data: download agent, 27-pair pilot, Phases 2–4 on 210 real reports
+
+**Done**
+- **Data without CMIE.** A small download agent (`bpp_fetch.py`, standard library only) runs on a team
+  laptop in India and fetches what job files list: IBBI's CIRP export (with CINs), the BSE/NSE listed
+  universe, BSE industry codes, annual-report PDFs and the standalone annual XBRL results. Every request
+  is logged with its SHA-256. Agent 1.4 keeps a file only when complete; 1.5 can split a file too large
+  to hand over (one report was 229 MB). See `docs/08_real_data.md`.
+- **Cohort from exchange data** (`scripts/exchange_pipeline.py`): 455 insolvent companies matched to a
+  listing by CIN; 175 eligible under the pilot rules; a 27-pair pilot sampled across admission years
+  2019–2025, peers from the same BSE sub-group within ±30% total assets. **All 27 insolvent firms are
+  confirmed by the CIN printed in their own reports** (26 exact, 1 via the registration number).
+- **All 210 pilot reports read** (pypdfium2 + Tesseract): 23,636 pages, 1,624 of them OCR'd, no failures.
+- **Phase 3 on real reports — what failed, and the fixes** (each has a regression test in
+  `tests/test_financials_real_reports.py`, 31 tests):
+  - statements in rupees with no caption read as crore (10^7 too large); a directors'-report P&L summary
+    taken for the P&L; cash-flow movements read as balances; bracketed expenses negative; pre-exceptional
+    PBT; a note number read as a figure; figures printed on the line after the label; unlabelled or bare
+    `Total` section totals; pre-Ind AS sheets with no section totals (now summed, kept only if the sheet
+    balances to rounding); "Other current liabilities" fuzzy-matched to the total; opening cash taken as
+    closing cash; the auditor's report and contents pages taken for the balance sheet; OCR slips (lost
+    `(`, spaced commas).
+  - XBRL is not always right either: 2 filings in the wrong unit, 2 that repeat last year's P&L, 1 with a
+    mistyped balance-sheet tag. Handled by evidence-based unit checks, a stale-copy rule and a
+    balance-sheet-identity arbitration; 6 reports read at the wrong scale are detected the same way.
+- **Result:** the PDF reader agrees with the XBRL filing within 1% on **87.9%** of 1,934 figures where both
+  exist (91.2% excluding the reports detected as read at the wrong scale). Unrecoverable
+  company-years (a core field missing after every source): **distressed 10 of 108, healthy 9 of 108**,
+  almost all FY2016–2018. Of the 160 modelling rows, 135 keep usable financials after the pair rule.
+- **Phase 4 on real reports:** tone for 201 of 210 reports (LM Master Dictionary 1993–2025), readability,
+  auditor flags, drift. Leakage review of the 7 flagged reports done (`interim/qa/leakage_review.csv`):
+  3 recommended for exclusion, not applied.
+- **Pilot signal check** (same pair, same horizon, modelling rows only; descriptive): the ratios separate
+  strongly (current ratio lower for the insolvent firm in 53 of 61 pairs, Altman Z'' in 44 of 51); language modestly
+  (MD&A hedging higher in 47 of 71, auditor's-report negative tone in 48 of 74, MD&A negative tone in 44 of 71;
+  going concern 6 pairs to 0). Drift shows nothing yet. `interim/qa/pilot/signal_check.csv`.
+
+**Not done / needs the team**
+- Confirm the provisional exclusions (financial sector, government companies, BSE group A).
+- Leakage: exclude the 3 reports that discuss the company's own insolvency petition?
+- **Phase 2 change request:** the CARO annexure is missed in 66 of 210 reports and the audit opinion in
+  35; fixing it means changing Phase 2 code.
+- Approve the full-cohort downloads (an estimated ~1,400 reports, ~9–10 GB, plus ~4,900 small industry
+  lookups). 13 pilot firms found no peer among the ≤30 traded members of their sub-group; the full
+  industry list would fix that.
+- Fill the financials spot-check sheet (`interim/qa/financials_spot_check.csv`, 22 company-years).
+
+**Next**
+1. Team decisions above, then the full cohort.
+2. Phase 2 CARO/opinion fix once approved; re-run Phase 4.
+3. Stream A (FinBERT) and the models, on Colab.
+
 ## 2026-09-23 — Phase 4 stream B built (language features, `bpp language-features`)
 
 **Done**
