@@ -80,3 +80,45 @@ def test_scanned_page_marked_or_ocrd(cfg, tmp_path):
         assert "RISKS" in ocr_page["text"].upper()
     else:
         assert res["n_needs_ocr_pages"] == 1
+
+
+# --------------------------------------------------------------------------- real-report fixes (2026-09-24)
+from bpp.extract.sections import annexure_kind, extract_auditor_subsections, find_heading_hits, assemble  # noqa: E402
+
+CARO_BODY = ("(Referred to in paragraph 1 under 'Report on Other Legal and Regulatory Requirements')\n"
+             "(i) (a) The Company has maintained proper records of property, plant and equipment.\n"
+             "(b) The fixed assets have been physically verified by the management.\n"
+             "(c) The title deeds of immovable properties are held in the name of the Company.\n"
+             "(vii) The Company is regular in depositing undisputed statutory dues.\n"
+             "(ix) The Company has not been declared a wilful defaulter by any bank.\n") * 3
+IFC_BODY = ("Report on the Internal Financial Controls over Financial Reporting under Clause (i) of "
+            "Sub-section 3 of Section 143 of the Companies Act, 2013\n"
+            "We have audited the internal financial controls over financial reporting of the Company.\n") * 3
+
+
+def test_the_text_not_the_letter_decides_which_annexure_is_caro():
+    assert annexure_kind(CARO_BODY) == "caro_annexure"
+    assert annexure_kind(IFC_BODY) == "ifc_annexure"
+    assert annexure_kind("Form AOC-1 Statement containing salient features of subsidiaries") is None
+    pages = [{"page": 1, "text": "ANNEXURE 'A' TO THE INDEPENDENT AUDITOR'S REPORT\n" + IFC_BODY},
+             {"page": 2, "text": "ANNEXURE 'B' TO THE INDEPENDENT AUDITOR'S REPORT OF EVEN DATE ON THE "
+                                 "FINANCIAL STATEMENTS OF XYZ LIMITED\n" + CARO_BODY},
+             {"page": 3, "text": "Annexure A\nForm AOC-1 Statement containing salient features of subsidiaries\n"}]
+    text, starts = assemble(pages)
+    got = {(h.section, h.page) for h in find_heading_hits(text, starts)}
+    assert ("caro_annexure", 2) in got and ("ifc_annexure", 1) in got
+    assert not any(p == 3 for _, p in got)            # a directors'-report annexure is not the auditor's
+
+
+def test_opinion_read_from_messy_headings_and_wording():
+    base = "Report on the Audit of the Standalone Financial Statements\n"
+    assert extract_auditor_subsections(base + "• OPINION\nWe have audited...\n")[1] == "unmodified"
+    assert extract_auditor_subsections(base + "Qualifi ed Opinion\nExcept for...\n")[1] == "qualified"
+    assert extract_auditor_subsections("Opinion Opinion Opinion Opinion\ntext\n")[1] == "unmodified"
+    assert extract_auditor_subsections("Report on the Audit of the Standalone Financial Statements Opinion\n")[1] \
+        == "unmodified"
+    # no heading at all: the opinion paragraph's wording decides
+    assert extract_auditor_subsections("In our opinion, except for the effects of the matter described, "
+                                       "the statements give a true and fair view")[1] == "qualified"
+    assert extract_auditor_subsections("In our opinion the aforesaid financial statements give a true "
+                                       "and fair view in conformity with")[1] == "unmodified"

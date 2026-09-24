@@ -87,6 +87,11 @@ class Paths:
         return self.manual / "loughran_mcdonald.csv"
 
     @property
+    def leakage_review(self) -> Path:
+        """Reports read for leakage: doc_id, decision (exclude|keep), reason."""
+        return self.manual / "leakage_review.csv"
+
+    @property
     def reviewed_matches(self) -> Path:
         return self.manual / "ibbi_listed_matches_reviewed.csv"
 

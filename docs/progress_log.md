@@ -2,6 +2,28 @@
 
 What was done each working session, newest first. Keep entries short: what, result, next.
 
+## 2026-09-24 — Decisions taken; Phase 2 CARO/opinion fix; full cohort started
+
+**Decided (Gaurav):** keep the exclusions (financial sector, government companies, BSE group A);
+exclude the 3 reports that discuss the company's own insolvency petition; fix Phase 2's CARO and
+audit-opinion detection; go ahead with the full cohort.
+
+**Done**
+- Phase 2 fix (`extract/sections.py`): the text under an auditor's annexure decides whether it is CARO
+  or internal financial controls, whatever its letter; long and bracketed annexure headings; opinion
+  read from messy headings or, failing that, from the opinion paragraph's wording. CARO found in
+  **185 of 210** reports (was 144, several of them the wrong annexure); opinion unidentified in 15
+  (was 39). 3 regression tests.
+- Leakage decisions now live in `data/manual/leakage_review.csv` and are applied by the labels step.
+- Pilot re-run: 154 modelling rows. The CARO default flag now separates the classes (insolvent firm
+  higher in 22 pairs, lower in 5; 47% vs 19% of reports).
+- Full cohort pipeline (`exchange_pipeline.py full-*`): 175 eligible insolvent firms, the pilot's 27
+  pairs kept. Collected data now lands in per-job part files so no file outgrows a transfer.
+  Downloads running: the industry list for all 4,881 active companies, then the insolvent firms' XBRL.
+
+**Next:** candidates → their filing lists and size-year XBRL → shortlist within ±30% → their report
+lists → pairs → ~1,200 reports → Phases 2–4 on the full cohort.
+
 ## 2026-09-23/24 — Real data: download agent, 27-pair pilot, Phases 2–4 on 210 real reports
 
 **Done**

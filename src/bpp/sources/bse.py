@@ -26,19 +26,28 @@ import pandas as pd
 BSE_WWW = "https://www.bseindia.com"
 
 
-def iter_jsonl(path: Path | str) -> Iterator[dict[str, Any]]:
-    """Records of a collect file; the latest record wins when a key repeats."""
-    latest: dict[str, dict[str, Any]] = {}
+def collect_parts(path: Path | str) -> list[Path]:
+    """``name.jsonl`` and its parts ``name_<job>.jsonl``, oldest first.
+
+    Large jobs write their own part so that each file stays small enough to move
+    from the laptop in one transfer (a single growing file passed 100 MB).
+    """
     p = Path(path)
-    if not p.exists():
-        return iter(())
-    with open(p, encoding="utf-8") as f:
-        for line in f:
-            try:
-                rec = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            latest[str(rec.get("key"))] = rec
+    parts = sorted(p.parent.glob(f"{p.stem}_*{p.suffix}")) if p.parent.exists() else []
+    return ([p] if p.exists() else []) + parts
+
+
+def iter_jsonl(path: Path | str) -> Iterator[dict[str, Any]]:
+    """Records of a collect file and its parts; the latest record wins when a key repeats."""
+    latest: dict[str, dict[str, Any]] = {}
+    for p in collect_parts(path):
+        with open(p, encoding="utf-8") as f:
+            for line in f:
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                latest[str(rec.get("key"))] = rec
     return iter(latest.values())
 
 

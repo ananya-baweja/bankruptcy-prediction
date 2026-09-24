@@ -82,3 +82,23 @@ def test_petition_date_excludes_later_reports(cfg):
     df = df.set_index("doc_id")
     assert df.loc["D1_FY2018", "exclude_reason"] == "published_after_petition"
     assert df.loc["D1_FY2017", "included"]
+
+
+def test_a_report_excluded_on_leakage_review_takes_its_pair_partner_with_it(cfg):
+    cohort = pd.DataFrame([
+        {"pair_id": "P1", "firm_id": "D1", "company_name": "D1", "role": "distressed", "label": 1,
+         "reference_date": "2020-08-14", "petition_date": None},
+        {"pair_id": "P1", "firm_id": "H1", "company_name": "H1", "role": "healthy", "label": 0,
+         "reference_date": "2020-08-14", "petition_date": None},
+    ])
+    frame = build_sample_frame(cohort, cfg)
+    docs = [{"doc_id": f"{r.firm_id}_FY{r.fy}", "status": "registered", "source": "manual",
+             "local_path": "x.pdf", "pub_date": f"{r.fy}-08-30"} for r in frame.itertuples()]
+    info = {"D1_FY2018": {"cirp_specific_mentions": 3}, "D1_FY2017": {"cirp_specific_mentions": 1}}
+    review = {"D1_FY2018": "exclude", "D1_FY2017": "keep"}
+    df, _ = assign_labels(frame, pd.DataFrame(docs), cohort, cfg, info, review)
+    df = df.set_index("doc_id")
+    assert df.loc["D1_FY2018", "exclude_reason"] == "leakage_review_excluded"
+    assert df.loc["H1_FY2018", "exclude_reason"] == "pair_partner_excluded"
+    assert df.loc["D1_FY2017", "included"] and not df.loc["D1_FY2017", "needs_leakage_review"]
+    assert df.loc["D1_FY2017", "leakage_review"] == "keep"
