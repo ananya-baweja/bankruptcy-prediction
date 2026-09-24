@@ -39,7 +39,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
 
-from bpp.features.numbers import (ParsedNumber, detect_unit, is_note_reference, parse_number,
+from bpp.features.numbers import (TO_CRORE, ParsedNumber, detect_unit, is_note_reference, parse_number,
                                   split_label_and_figures)
 
 log = logging.getLogger(__name__)
@@ -51,6 +51,7 @@ _SCOPE = r"(?P<scope>standalone|consolidated|separate)?\s*"
 
 STATEMENT_PATTERNS: list[tuple[str, str]] = [
     ("balance_sheet", _SCOPE + r"balance\s+sheet\s+as\s+(?:at|on)\b"),
+    ("balance_sheet", _SCOPE + r"(?:audited\s+)?balance\s+sheet$"),     # the date on the next line
     ("balance_sheet", _SCOPE + r"statement\s+of\s+(?:assets\s+and\s+liabilities|financial\s+position)\b"),
     ("profit_and_loss", _SCOPE + r"statement\s+of\s+profit\s+(?:and|&)\s+loss\b"),
     ("profit_and_loss", _SCOPE + r"profit\s+(?:and|&)\s+loss\s+(?:statement|account)\b"),
@@ -129,19 +130,70 @@ def count_money_lines(page: dict[str, Any], n_periods: int = 2) -> int:
     return total
 
 
+_MONTHS = (r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?"
+           r"|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)")
+_TAIL_DATE = re.compile(
+    rf"^[\s,.:;(\-]*(?:\d{{1,2}}\s*(?:st|nd|rd|th|[\"'”’`]+)?\s*[.,/-]?\s*{_MONTHS}\.?\s*[.,/-]?\s*,?\s*\d{{2,4}}"
+    rf"|{_MONTHS}\.?\s*\d{{1,2}}(?:st|nd|rd|th)?\s*,?\s*\d{{4}}"
+    rf"|\d{{1,2}}\s*[./-]\s*\d{{1,2}}\s*[./-]\s*\d{{2,4}})", re.I)
+_TAIL_REST = re.compile(
+    r"^[\s,.:;()\[\]\-–|`₹*]*(?:(?:all|amounts?|figures?|fig|rs|rupees|inr|in|lakhs?|lacs?|crores?|millions?"
+    r"|thousands?|unless|otherwise|stated|except|per|share|data|and|standalone|audited)\b[\s,.:;()\[\]\-–|`₹*]*)*$",
+    re.I)
+
+
+_BARE_HEADING = re.compile(r"(?:(?:standalone|consolidated|separate)\s+)?(?:audited\s+)?balance\s+sheet", re.I)
+_CONTENTS = re.compile(r"\bcontents\b|\bindex\b", re.I)
+
+#: words that make a heading's tail a sentence ("...which comprise the Balance Sheet as at")
+_SENTENCE = re.compile(r"\b(?:included|which|comprise\w*|referred|annexed|forming|these|dealt|read\s+with"
+                       r"|and\s+the|they|been)\b", re.I)
+_PERIOD_PREAMBLE = re.compile(r"^(?:for\s+the\s+(?:financial\s+)?(?:year|period)\s+end(?:ed|ing)?(?:\s+on)?)\s*",
+                              re.I)
+
+
+def _heading_tail_ok(tail: str, heading: str = "") -> bool:
+    """What follows a statement's name must be a date and a unit caption, not a sentence.
+
+    A date plus caption may run long ("as at 31 March 2019 (All amounts in lacs,
+    unless stated otherwise)" was rejected by the length rule on a real report);
+    anything else keeps the old length limit.
+    """
+    t = tail.strip()
+    if not t:
+        return True
+    if _SENTENCE.search(t):
+        return False
+    # a contents line: the name, maybe its date, then a page number ("Cash Flow
+    # Statement 144", "Balance Sheet as at 31 March, 2020 67") - chosen over the
+    # real statements on real reports because address pages count as figures
+    if re.fullmatch(r"\d{1,3}", t):
+        as_at = bool(re.search(r"\bas\s+(?:at|on)$", heading.strip(), re.I))
+        return as_at and bool(re.fullmatch(r"[1-9]|[12]\d|3[01]", t))    # "as at 31" / "March, 2019"
+    core = _PERIOD_PREAMBLE.sub("", t)
+    m = _TAIL_DATE.match(core)
+    if m and re.fullmatch(r"\s*\d{1,3}\s*", core[m.end():]):
+        return False
+    if m and _TAIL_REST.match(core[m.end():]):
+        return True
+    return len(t) <= _MAX_HEADING_TAIL
+
+
 def _heading_hits(pages: list[dict[str, Any]]) -> list[tuple[str, str, int, str]]:
     """(statement, scope, page_number, heading_line) for every statement heading."""
     hits: list[tuple[str, str, int, str]] = []
     for idx, page in enumerate(pages):
         for line in page["text"].split("\n"):
             candidate = re.sub(r"\s+", " ", line).strip().strip("*#|:-")
+            candidate = re.sub(r"^[A-Z]{1,3}\s+(?=(?:standalone\s+)?(?:balance|statement|profit|cash)\b)", "",
+                               candidate, flags=re.I)
             if not candidate or len(candidate) > 160:
                 continue
             for name, rx in _STATEMENT_COMPILED:
                 m = rx.match(candidate)
                 if not m:
                     continue
-                if len(candidate[m.end():].strip()) > _MAX_HEADING_TAIL:
+                if not _heading_tail_ok(candidate[m.end():], m.group(0)):
                     continue                     # a sentence, not a heading
                 scope = _page_scope(pages, idx, m.groupdict().get("scope"))
                 hits.append((name, scope, page["page"], candidate))
@@ -188,6 +240,14 @@ def locate_statements(pages: list[dict[str, Any]], cfg: dict[str, Any],
         # standalone over consolidated; then the earliest page within a tier.
         tier = {"standalone": 0, "unscoped": 1, "consolidated": 2}
         substantive = [h for h in candidates if money_lines.get(h[2], 0) >= min_money_lines]
+        # A heading that is only the statement's name ("Balance Sheet") is also how
+        # a contents page and a running header read. It stands only on a page that
+        # is not a contents page and carries figures like the other candidates do.
+        best_lines = max((money_lines.get(h[2], 0) for h in candidates), default=0)
+        substantive = [h for h in substantive
+                       if not _BARE_HEADING.fullmatch(h[3])
+                       or (not _CONTENTS.search(by_page[h[2]]["text"])
+                           and money_lines.get(h[2], 0) >= 0.5 * best_lines)]
         pool = substantive or candidates
         anchor = out.get("balance_sheet")
         if name != "balance_sheet" and anchor is not None:
@@ -316,7 +376,7 @@ def detect_period_columns(header_text: str, report_fy: int | None = None,
 CONTEXT_PATTERNS: list[tuple[str, str]] = [
     ("non_current_assets", r"non[\s-]*current\s+assets\b"),
     ("current_assets", r"^current\s+assets\b"),
-    ("equity", r"^equity\b(?!\s+and\s+liabilities)|shareholders?'?\s+funds?\b"),
+    ("equity", r"^equity\b(?!\s+and\s+liabilities)|share\s*ho[il1]ders?['’]?\s*funds?\b"),
     ("non_current_liabilities", r"non[\s-]*current\s+liabilit(?:y|ies)\b"),
     ("current_liabilities", r"^current\s+liabilit(?:y|ies)\b"),
     ("liabilities", r"^liabilities\b"),
@@ -328,9 +388,11 @@ _CONTEXT_COMPILED = [(name, re.compile(pat, re.I)) for name, pat in CONTEXT_PATT
 #: Schedule III enumerators in front of a label: "(2)", "(iii)", "a)", "1.", "II", "B".
 #: Left in place they defeat every anchored pattern: "(2) Current Assets" was not
 #: seen as the current-assets heading, so borrowings lost their context (real reports).
+_ROMAN = r"(?=[ivxIVX])[xX]{0,3}(?:[iI][xX]|[iI][vV]|[vV]?[iI]{0,3})"
 _ENUMERATOR = re.compile(
-    r"^\s*(?:(?i:\(\s*(?:[ivxlc]{1,5}|[a-z]|\d{1,2})\s*\)|(?:[ivxlc]{1,5}|[a-z]|\d{1,2})\s*[.)])"
-    r"|(?:[IVX]{1,4}|[A-H])(?=\s))\s*")
+    rf"^\s*(?:\(\s*(?:{_ROMAN}|[A-Za-z]|\d{{1,2}})\s*\)"          # (iii) (a) (2)
+    rf"|(?:{_ROMAN}|[A-Za-z]|\d{{1,2}})\s*[.)]"                     # iii) a. 2.
+    rf"|(?:{_ROMAN}|[A-Ha-h]|\d{{1,2}})(?=\s+[A-Za-z]))\s*")       # III CURRENT / a Inventories / 2 Current
 
 
 def strip_enumerator(label: str) -> str:
@@ -379,6 +441,9 @@ class LineItem:
 
 
 _BARE_TOTAL = re.compile(r"^total(?:\s+(?:rupees|rs|amount|inr))?$")
+_GRAND_TOTAL = re.compile(r"^total\s+(?:assets|equity\s+and\s+liabilit(?:y|ies)|liabilit(?:y|ies)\s+and\s+equity)\b")
+#: signature-block lines under a statement, which carry numbers but are not rows
+_FOOTER = re.compile(r"^(?:din|m\s*no|membership|firm\s*reg|frn|date|place|pan|cin|udin|icai)\b")
 _ASSET_SIDE = {"non_current_assets", "current_assets", "assets"}
 _LIABILITY_SIDE = {"equity", "non_current_liabilities", "current_liabilities", "liabilities",
                    "equity_and_liabilities"}
@@ -413,32 +478,64 @@ def _join_following_figures(lines: list[str], i: int, label: str, n_periods: int
     return got[:n_periods], j
 
 
+def _closes_side(lines: list[str], i: int, context: str | None, n_periods: int) -> bool:
+    """Whether a bare "Total" at line ``i - 1`` ends its side of the balance sheet.
+
+    The next thing printed is the other side's heading, or no more figures at all:
+    then it is the side's grand total even if it equals the rows above it (which
+    happens when a section heading was lost and its rows ran on).
+    """
+    for nxt in lines[i:]:
+        if not nxt.strip():
+            continue
+        ctx = detect_context(nxt)
+        if ctx:
+            return (context in _ASSET_SIDE) != (ctx in _ASSET_SIDE)
+        _, toks = split_label_and_figures(nxt, n_periods)
+        if any(parse_number(t).ok for t in toks):
+            return False
+    return True
+
+
 def parse_statement_lines(pages: list[dict[str, Any]], loc: StatementLocation) -> list[LineItem]:
     """Walk the statement's pages and turn every money line into a LineItem.
 
-    Besides labelled lines this reads three layouts found on real reports:
+    Besides labelled lines this reads four layouts found on real reports:
 
     * a row whose figures sit on the lines after its label (joined to the label);
     * a section total printed with no label, or as a bare ``Total``: taken as the
       section's total only when it equals the sum of the section's rows, so a
       grand total or a stray figure is never mistaken for one;
-    * a section heading that carries the section total on its own line.
+    * a section heading that carries the section total on its own line;
+    * sections printed with no total at all (the pre-Ind AS format prints only
+      each side's grand total): the section's rows are summed, and the sums are
+      kept only when they reproduce the balance sheet - non-current + current
+      assets = total assets, equity + non-current + current liabilities = total
+      equity and liabilities - column by column.
     """
     n_periods = max(1, len(loc.period_fys) or 2)
     items: list[LineItem] = []
     context: str | None = None
-    section_sum, section_n = 0.0, 0
+    sums: dict[str, list[float]] = {}          # per section, per column (as printed)
+    counts: dict[str, int] = {}
     subtotals: dict[str, LineItem] = {}
+    candidates: dict[str, list[tuple[LineItem, int]]] = {}   # unlabelled totals, with the row count then
+    last_page = loc.start_page
 
-    def switch(ctx: str | None) -> None:
-        nonlocal context, section_sum, section_n
-        if ctx != context:
-            section_sum, section_n = 0.0, 0
-        context = ctx
+    def add_row(figures: list[ParsedNumber]) -> None:
+        if context not in _SUBTOTAL_FIELD:
+            return
+        acc = sums.setdefault(context, [0.0] * n_periods)
+        for col in range(min(n_periods, len(figures))):
+            f = figures[col]
+            if f.ok and f.printed is not None:
+                acc[col] += f.printed
+        counts[context] = counts.get(context, 0) + 1
 
     for page in pages:
         if not (loc.start_page <= page["page"] <= loc.end_page):
             continue
+        last_page = page["page"]
         lines = [raw.rstrip() for raw in page["text"].split("\n")]
         i = 0
         while i < len(lines):
@@ -451,7 +548,7 @@ def parse_statement_lines(pages: list[dict[str, Any]], loc: StatementLocation) -
             if not figure_tokens:
                 ctx = detect_context(line)
                 if ctx:
-                    switch(ctx)
+                    context = ctx
                     continue
                 figure_tokens, i = _join_following_figures(lines, i, label, n_periods)
                 if not figure_tokens:
@@ -465,38 +562,166 @@ def parse_statement_lines(pages: list[dict[str, Any]], loc: StatementLocation) -
                 # an unlabelled (or bare "Total") line: a section total if it adds up
                 if first is None:
                     continue
-                if context in _SUBTOTAL_FIELD and section_n >= 2 and _adds_up(first, section_sum, section_n):
-                    subtotals[context] = LineItem(
+                n = counts.get(context, 0)
+                closes_side = bool(label) and _closes_side(lines, i, context, n_periods)
+                if context in _SUBTOTAL_FIELD and n >= 2 and not closes_side \
+                        and _adds_up(first, sums[context][0], n):
+                    candidates.setdefault(context, []).append((LineItem(
                         label="total " + context.replace("_", " "), figures=figures, page=page["page"],
-                        context=context, raw=raw, source="subtotal")
+                        context=context, raw=raw, source="subtotal"), n))
                 elif label and context in _ASSET_SIDE:
                     items.append(LineItem(label="total assets", figures=figures, page=page["page"],
                                           context=context, raw=raw, source="bare_total"))
+                    context = None               # the side is closed: nothing below belongs to it
                 elif label and context in _LIABILITY_SIDE:
                     items.append(LineItem(label="total equity and liabilities", figures=figures,
                                           page=page["page"], context=context, raw=raw, source="bare_total"))
+                    context = None
                 continue
+            if _FOOTER.match(norm):
+                continue                         # signatures: "DIN 01704145", "Membership No. 409391"
 
             heading = _SECTION_HEADINGS.get(_heading_key(norm))
             ctx_here = detect_context(label)
             if ctx_here:
-                switch(ctx_here)
+                context = ctx_here
             if not any(f.ok for f in figures):
-                if ctx_here is None:
-                    section_n += 1              # an explicitly empty row still belongs to the section
+                if ctx_here is None and context in _SUBTOTAL_FIELD:
+                    counts[context] = counts.get(context, 0) + 1   # an explicitly empty row
                 continue
             if heading:
                 # "Current liabilities 8,002.68 8,354.75": the heading carries the total
                 items.append(LineItem(label="total " + _heading_key(norm), figures=figures, page=page["page"],
                                       context=context, raw=raw, source="heading_total"))
+                subtotals.setdefault(_HEADING_CONTEXT.get(_heading_key(norm), ""), items[-1])
                 continue
             items.append(LineItem(label=label, figures=figures, page=page["page"],
                                   context=context, raw=raw))
-            if not norm.startswith("total") and first is not None:
-                section_sum += first
-                section_n += 1
-    items.extend(subtotals.values())
+            if not norm.startswith("total"):
+                add_row(figures)
+            elif _GRAND_TOTAL.match(norm):
+                context = None                   # "Total assets" closes its side of the sheet
+    subtotals.pop("", None)
+    # An unlabelled total counts only if it closes its section - no row after it.
+    # "(a) Fixed assets" followed by its two rows and their unlabelled sum adds up
+    # too, but more non-current rows follow it.
+    grand = {}
+    for it in items:
+        hit = match_field(it.label, it.context)
+        if hit and hit[0] in ("total_assets", "total_equity_and_liabilities") and it.figures and it.figures[0].ok:
+            grand.setdefault(hit[0], it.figures[0].printed)
+    siblings = {"non_current_assets": ("current_assets",), "current_assets": ("non_current_assets",),
+                "equity": ("non_current_liabilities", "current_liabilities"),
+                "non_current_liabilities": ("equity", "current_liabilities"),
+                "current_liabilities": ("equity", "non_current_liabilities")}
+
+    def is_grand_total(item: LineItem, ctx: str) -> bool:
+        # a missed section heading leaves the next section's rows in this one, and
+        # the side's grand total then "adds up" to it (real report: "2 Current assets")
+        g = grand.get("total_assets" if ctx in ("non_current_assets", "current_assets")
+                      else "total_equity_and_liabilities")
+        v = item.figures[0].printed if item.figures and item.figures[0].ok else None
+        others = any(abs(sums.get(o, [0.0])[0]) > 0 for o in siblings[ctx])
+        return g is not None and v is not None and others and abs(v - g) <= 0.001 * max(abs(g), 1e-9)
+
+    for ctx, cands in candidates.items():
+        closing = [item for item, n in cands if n == counts.get(ctx, 0) and not is_grand_total(item, ctx)]
+        if closing and ctx not in subtotals:
+            subtotals[ctx] = closing[-1]
+            items.append(closing[-1])
+    # printed totals ("Total current assets 1,234") count as the section's total too
+    for it in items:
+        hit = match_field(it.label, it.context)
+        ctx = _FIELD_SECTION.get(hit[0]) if hit and hit[2] == "pattern" else None
+        if ctx and it.source == "text":
+            subtotals.setdefault(ctx, it)
+    items.extend(_computed_section_totals(items, subtotals, sums, counts, n_periods, loc, last_page))
     return items
+
+
+_FIELD_SECTION = {"current_assets": "current_assets", "non_current_assets": "non_current_assets",
+                  "current_liabilities": "current_liabilities",
+                  "non_current_liabilities": "non_current_liabilities", "total_equity": "equity"}
+
+
+_HEADING_CONTEXT = {"non current assets": "non_current_assets", "current assets": "current_assets",
+                    "non current liabilities": "non_current_liabilities",
+                    "current liabilities": "current_liabilities", "equity": "equity",
+                    "shareholders funds": "equity", "shareholder s funds": "equity"}
+
+
+def _computed_section_totals(items: list[LineItem], subtotals: dict[str, LineItem],
+                             sums: dict[str, list[float]], counts: dict[str, int],
+                             n_periods: int, loc: StatementLocation, page: int) -> list[LineItem]:
+    """Section totals built by adding the section's rows, kept only where they balance."""
+    missing = [ctx for ctx in _SUBTOTAL_FIELD if ctx not in subtotals and counts.get(ctx, 0) >= 1]
+    if not missing:
+        return []
+
+    def printed(item: LineItem | None) -> list[float | None]:
+        if item is None:
+            return [None] * n_periods
+        vals = [f.printed if f.ok else None for f in item.figures[:n_periods]]
+        return vals + [None] * (n_periods - len(vals))
+
+    grand: dict[str, LineItem] = {}
+    for it in items:
+        hit = match_field(it.label, it.context)
+        if hit and hit[0] in ("total_assets", "total_equity_and_liabilities"):
+            grand.setdefault(hit[0], it)
+    ta, tel = printed(grand.get("total_assets")), printed(grand.get("total_equity_and_liabilities"))
+
+    section: dict[str, list[float | None]] = {}
+    for ctx in _SUBTOTAL_FIELD:
+        if ctx in subtotals:
+            section[ctx] = printed(subtotals[ctx])
+        elif ctx in missing:
+            section[ctx] = list(sums.get(ctx, [0.0] * n_periods))
+    sides = {"assets": ("non_current_assets", "current_assets"),
+             "liabilities": ("equity", "non_current_liabilities", "current_liabilities")}
+    decimals = any("." in f.raw for it in items for f in it.figures if f.ok)
+    half_step = 0.005 if decimals else 0.5
+    out: list[LineItem] = []
+    keep: dict[str, list[bool]] = {ctx: [False] * n_periods for ctx in missing}
+    for col in range(n_periods):
+        side_sum = {}
+        for side, parts in sides.items():
+            vals = [section.get(ctx, [None] * n_periods)[col] for ctx in parts]
+            side_sum[side] = None if any(v is None for v in vals) else sum(vals)
+        targets = {"assets": ta[col] if ta[col] is not None else tel[col],
+                   "liabilities": tel[col] if tel[col] is not None else ta[col]}
+        for side, parts in sides.items():
+            target = targets[side]
+            if target is None:            # no grand total printed: the two sides must agree
+                other = side_sum["liabilities" if side == "assets" else "assets"]
+                target = other
+            got = side_sum[side]
+            if got is None or target is None:
+                continue
+            # A summed total is a number we build, so only rounding may separate it
+            # from the printed total: half a unit of the last printed digit per row.
+            # A relative tolerance would pass a sheet missing a small row, and a
+            # current-liabilities total short by 30% (seen in testing).
+            n_rows = sum(counts.get(ctx, 0) for ctx in parts) + 1
+            if abs(got - target) <= max(half_step * n_rows, 1e-6 * abs(target)):
+                for ctx in parts:
+                    if ctx in keep:
+                        keep[ctx][col] = True
+    factor = TO_CRORE.get(loc.unit, 1.0)
+    for ctx, cols in keep.items():
+        if not any(cols):
+            continue
+        figures = []
+        for col in range(n_periods):
+            v = section[ctx][col]
+            if cols[col] and v is not None:
+                figures.append(ParsedNumber(value=round(v * factor, 9), raw="sum of rows", printed=v,
+                                            unit=loc.unit, confidence=0.9, flags=["computed_section_sum"]))
+            else:
+                figures.append(ParsedNumber(raw="", unit=loc.unit, is_nil=True))
+        out.append(LineItem(label="total " + ctx.replace("_", " "), figures=figures, page=page,
+                            context=ctx, raw="sum of the section's rows", source="section_sum"))
+    return out
 
 
 # --------------------------------------------------------------------------- field mapping
@@ -592,7 +817,8 @@ STANDARD_FIELDS = sorted(FIELD_STATEMENT)
 
 
 def _normalise_label(label: str) -> str:
-    s = strip_enumerator(label).lower().replace("&", "and")
+    s = strip_enumerator(label).lower().replace("&", "and").replace("'", "").replace("’", "")
+    s = re.sub(r"^sub[\s-]*total\s*[-–:]*\s*", "total ", s)     # "Sub total-Current Liabilities"
     s = re.sub(r"\(.*?\)", " ", s)                       # "(refer note 7)"
     s = re.sub(r"[^a-z0-9\s/-]", " ", s)
     s = re.sub(r"\s+-+\s+|^-+\s*|\s*-+$", " ", s)          # "TOTAL - ASSETS", "- Borrowings"
@@ -671,7 +897,7 @@ def map_statement(items: Iterable[LineItem], loc: StatementLocation) -> list[Fie
         if not matched:
             continue
         fieldname, score, how = matched
-        if item.source in ("subtotal", "bare_total", "heading_total"):
+        if item.source in ("subtotal", "bare_total", "heading_total", "section_sum"):
             # read from layout, not from a printed label: an explicit label outranks it
             score, how = min(score, 0.9), item.source
         for col, parsed in enumerate(item.figures):

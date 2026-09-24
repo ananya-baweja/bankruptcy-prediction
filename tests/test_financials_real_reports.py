@@ -234,7 +234,59 @@ def test_an_unlabelled_line_that_does_not_add_up_is_ignored(cfg):
     rows = list(YASHRAJ_BS)
     rows[rows.index(" 7,977.47 8,232.83")] = " 9,999.00 8,232.83"
     got = _read(rows, cfg)
-    assert ("current_liabilities", 2022) not in got
+    # the stray figure is never taken; the rows' own sum is, because it balances the sheet
+    assert got[("current_liabilities", 2022)].value == pytest.approx(79.7747)
+    assert got[("current_liabilities", 2022)].match_how == "section_sum"
+
+
+OLD_FORMAT_BS = [                  # pre-Ind AS layout: no section totals, one "Total" per side
+    "Balance Sheet as at 31st March, 2017",
+    "Particulars Note No. As at 31.03.2017 As at 31.03.2016",
+    "A. EQUITY AND LIABILITIES",
+    "(1) Shareholders' Funds",
+    "(a) Share Capital 3 149,580,000 149,580,000",
+    "(b) Reserve & Surplus 4 (13,286,278) (13,195,179)",
+    "(2) Non-Current Liabilities",
+    "(a) Long-term borrowings 5 - -",
+    "(b) Deferred tax liabilities (Net) 5 10,972 20,862",
+    "(3) Current Liabilities",
+    "(a) Short-term borrowings 6 50,000 50,000",
+    "(b) Trade payables 7 38,000 12,000",
+    "(c) Other current liabilities 8 38,322 67,700",
+    "Total 136,431,016 136,535,383",
+    "B. ASSETS",
+    "(1) Non-current assets",
+    "(a) Fixed assets",
+    "(i) Tangible assets 10 1,000,000 1,100,000",
+    "(ii) Intangible assets 11 129,202 271,510",
+    " 1,129,202 1,371,510",
+    "(b) Non-current investments 12 95,480,472 95,480,472",
+    "(2) Current assets",
+    "(a) Inventories 13 38,888,794 38,475,337",
+    "(b) Cash and cash equivalents 14 1,000,000 1,000,000",
+    "(c) Other current assets 17 (67,452) 208,064",
+    "Total 136,431,016 136,535,383",
+]
+
+
+def test_sections_without_totals_are_summed_when_the_sheet_balances(cfg):
+    got = _read(OLD_FORMAT_BS, cfg, fy=2017)
+    assert got[("total_equity", 2017)].value == pytest.approx(13.6293722)
+    assert got[("non_current_liabilities", 2017)].value == pytest.approx(0.0010972)
+    assert got[("current_liabilities", 2017)].value == pytest.approx(0.0126322)
+    assert got[("current_assets", 2017)].value == pytest.approx(3.9821342)
+    # "(a) Fixed assets" has its own unlabelled sum, but it is not the section's total
+    assert got[("non_current_assets", 2017)].value == pytest.approx(9.6609674)
+    assert got[("total_assets", 2017)].value == pytest.approx(13.6431016)
+    assert got[("current_liabilities", 2016)].value == pytest.approx(0.0129700)
+
+
+def test_summed_sections_that_do_not_balance_are_dropped(cfg):
+    rows = [r for r in OLD_FORMAT_BS if not r.startswith("(b) Trade payables")]   # a row lost to OCR
+    got = _read(rows, cfg, fy=2017)
+    for f in ("total_equity", "non_current_liabilities", "current_liabilities"):
+        assert (f, 2017) not in got
+    assert got[("current_assets", 2017)].value == pytest.approx(3.9821342)    # the other side still balances
 
 
 def test_a_labelled_total_beats_the_unlabelled_one(cfg):
@@ -430,3 +482,101 @@ def test_a_confidently_misread_report_unit_does_not_override_consistent_xbrl():
     checks = xbrl_unit_checks(figs, ex)
     assert checks[("BSE9", 2024)] == "pdf_unit_suspect"     # the report slipped, whatever its caption said
     assert checks[("BSE8", 2019)] == "xbrl_unit_suspect"    # the filing slipped, though the report's unit was a guess
+
+
+def test_headings_with_bare_numbers_and_spaced_hyphens(cfg):
+    rows = [                        # BSE531867 FY2023 layout, lakh
+        "Balance Sheet As At 31st March 2023 (Rs. In Lakhs)", "Note No. As at 31st March 2023 As at 31st March 2022",
+        "ASSETS",
+        "1 Non - Current assets",
+        "a Property, Plant and Equipment 1 504.09 622.55",
+        "b Capital work-in-progress - -",
+        "h Financial Assets",
+        "ii Loans & Advances 2 21.09 20.04",
+        "c Other Non - Current assets 3 19.95 -",
+        "Sub-Total 545.13 642.60",
+        "2 Current assets",
+        "a Inventories 4 704.69 1,590.51",
+        "ii Trade receivables 5 2,517.40 2,354.01",
+        "e Other Current Assets 9 163.36 37.78",
+        "Sub-Total 3,385.45 3,982.30",
+        " 3,930.58 4,624.90",
+    ]
+    got = _read(rows, cfg, fy=2023)
+    assert got[("non_current_assets", 2023)].value == pytest.approx(5.4513)
+    assert got[("current_assets", 2023)].value == pytest.approx(33.8545)
+    assert got[("inventories", 2023)].value == pytest.approx(7.0469)
+    assert ("total_assets", 2023) not in got     # "Sub-Total" is never the balance sheet total
+
+
+def test_a_subtotal_equal_to_the_grand_total_is_not_a_section_total(cfg):
+    rows = [                        # the "2 Current assets" heading lost: its rows run on under non-current
+        "Balance Sheet as at 31st March, 2019", "(Rs. in Lakhs)", "Note 31.03.2019 31.03.2018",
+        "Non-current assets",
+        "Property, plant and equipment 2 2,868.71 2,972.80",
+        "Investments 3 9,138.50 8,422.64",
+        "CURRENTASSETS",
+        "Inventories 7 8.03 10.16",
+        "Trade receivables 8 564.96 363.61",
+        "TOTAL 12,580.20 11,769.21",
+    ]
+    got = _read(rows, cfg, fy=2019)
+    assert ("non_current_assets", 2019) not in got
+    assert got[("total_assets", 2019)].value == pytest.approx(125.802)
+
+
+def test_signature_lines_under_the_sheet_are_not_rows(cfg):
+    rows = [                        # BSE533157 FY2016, rupees, section totals unlabelled
+        "BALANCE SHEET AS AT 31 MARCH 2016 Amount in Rs.", "PARTICULARS Note No. 31.03.2016 31.03.2015",
+        "I. EQUITY AND LIABILITIES", "1 Shareholders' Fund:",
+        "Share Capital 2 400,000,000 400,000,000", "Reserves and Surplus 3 1,201,555,660 1,236,731,499",
+        "1,601,555,660 1,636,731,499",
+        "2 Non-Current Liabilities", "Long Term Borrowings 4 106,999,900 128,639,768",
+        "Long Term Provisions 5 3,558,231 2,262,768", " 110,558,131 130,902,536",
+        "3 Current Liabilities", "Short Term Borrowings 6 192,612,152 147,150,348",
+        "Trade Payables 7 68,997,721 62,203,438", "Other Current Liabilities 8 20,175,747 29,248,163",
+        "Short Term Provisions 9 12,977,854 6,454,249", " 294,763,474 245,056,198",
+        "Total 2,006,877,265 2,012,690,233",
+        "II. ASSETS", "1 Non Current Assets", "Fixed Assets 10",
+        "Tangible Assets 203,539,265 230,242,418", "Intangible Assets 3,373,459 4,326,416",
+        "206,912,724 234,568,834",
+        "Non Current Investments 11 908,071,171 908,071,171", "Deferred Tax Assets (Net) 12 70,121,191 62,125,241",
+        "Long Term Loans and Advances 13 135,269,853 148,927,861", "Other Non-Current Assets 14 12,293,191 17,082,692",
+        " 1,125,755,406 1,136,206,965",
+        "2 Current Assets", "Inventories 15 133,505,444 133,149,402", "Trade Receivables 16 305,569,022 265,769,982",
+        "Cash and Bank Balances 17 13,708,663 8,035,357", "Short Term Loans and Advances 18 194,045,334 216,082,297",
+        "Other Current Assets 19 27,380,672 18,877,396", " 674,209,135 641,914,434",
+        "Total 2,006,877,265 2,012,690,233",
+        "Firm Regn. No. 104863W", "DIN : 02675798", "Membership No. 137686", "Date: May 30, 2016",
+    ]
+    got = _read(rows, cfg, fy=2016)
+    assert got[("current_assets", 2016)].value == pytest.approx(67.4209135)
+    # the report prints two partial sums under non-current assets (fixed assets: 20.69 cr;
+    # the rest: 112.58 cr); neither is the section total. The rows' sum is, because
+    # non-current + current = the printed total of 200.69 cr
+    assert got[("non_current_assets", 2016)].value == pytest.approx(133.266813)
+    assert got[("non_current_assets", 2016)].match_how == "section_sum"
+    assert got[("current_liabilities", 2016)].value == pytest.approx(29.4763474)
+    assert got[("total_equity", 2016)].value == pytest.approx(160.155566)
+    assert got[("total_assets", 2016)].value == pytest.approx(200.6877265)
+
+
+def test_missing_totals_are_filled_from_their_definition_only():
+    from bpp.features.financials import derive_missing_totals
+    wide = pd.DataFrame([{"firm_id": "BSE1", "fy": 2017, "total_assets": 100.0, "total_equity_and_liabilities": np.nan,
+                          "non_current_assets": 60.0, "current_assets": np.nan, "equity_share_capital": 10.0,
+                          "other_equity": 30.0, "total_equity": np.nan, "non_current_liabilities": 20.0,
+                          "current_liabilities": np.nan},
+                         {"firm_id": "BSE1", "fy": 2016, "total_assets": 90.0, "total_equity_and_liabilities": 90.0,
+                          "non_current_assets": 50.0, "current_assets": 45.0, "equity_share_capital": 10.0,
+                          "other_equity": np.nan, "total_equity": 35.0, "non_current_liabilities": 20.0,
+                          "current_liabilities": np.nan}])
+    out = derive_missing_totals(wide)
+    r = out.iloc[0]
+    assert r.current_assets == 40.0 and r.total_equity == 40.0 and r.total_equity_and_liabilities == 100.0
+    assert r.current_liabilities == 40.0          # 100 - 40 - 20, using the derived equity
+    assert set(r.derived_fields.split(";")) == {"current_assets", "total_equity", "total_equity_and_liabilities",
+                                                "current_liabilities"}
+    r = out.iloc[1]
+    assert r.current_assets == 45.0               # a figure that was read is never replaced
+    assert r.current_liabilities == 35.0 and r.derived_fields == "current_liabilities"

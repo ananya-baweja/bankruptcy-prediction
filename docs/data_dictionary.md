@@ -71,6 +71,8 @@ when a key repeats, the last line wins. `logs/<job>.csv` records every request w
 | `xbrl_financials_exchange.csv` | `firm_id, fy, field, value_cr, source_url, note` parsed from the exchange XBRL filings (Rs crore) - Phase 3 reads it first when `xbrl_priority: first` |
 | `report_cin_check.csv` | per insolvent firm: the IBBI CIN, the CIN printed in its reports, and `confirmed / confirmed_reg_no / mismatch / cin_not_found` |
 | `text_extraction_summary.csv` | per report: pages, OCR pages, backend, seconds |
+| `qa/leakage_review.csv` | the reports Phase 2 flagged (`needs_leakage_review`), read: `finding` (own_petition / company_as_creditor / statutory_disclosure / guaranteed_party), `evidence` (page + gist), `recommendation` |
+| `qa/pilot/` | `scripts/pilot_report.py`: `summary.md`, `pdf_vs_xbrl_by_field.csv`, `pdf_vs_xbrl_mismatches.csv` (with `disagreement`), `unrecoverable_by_class.csv`, `coverage_by_class.csv`, `signal_check.csv` |
 
 ## Processed (`processed/`)
 
@@ -112,7 +114,10 @@ beside it:
 | --- | --- |
 | `pdf_value_cr, pdf_source, pdf_source_doc_id, pdf_page` | what the annual report gave for the same field, and where |
 | `xbrl_pdf_diff` | relative gap between the two (0 = identical); the PDF reader's accuracy on real reports |
-| `unit_check` | blank, `xbrl_unit_suspect` (the XBRL filing is off by a power of ten against a report that states its unit — the filing is not used for that company-year) or `pdf_unit_suspect` (the report reading is the one off) |
+| `unit_check` | per company-year: blank; `xbrl_unit_suspect` (the XBRL filing is a power of ten off - not used for that year); `pdf_unit_suspect` (the report was read at the wrong scale - its own-year figures are not used); `xbrl_stale_copy_pl` (the filing repeats last year's profit and loss - its flow figures are not used) |
+| `xbrl_value_cr, arbitration` | set when the balance-sheet identities chose the report over the filing: the filing's value, and e.g. `report_value_balances_1_of_1_xbrl_0` |
+
+`match_how` says how a figure was read: `pattern` / `fuzzy` (a printed label), `subtotal` (an unlabelled or bare `Total` line closing its section and equal to its rows), `bare_total` (a side's closing `Total`), `heading_total` (a section heading printed with its total), `section_sum` (rows added up where the report prints no total; kept only when both sides balance to rounding), `identity_arbitration`, `xbrl`.
 
 ### `financials_extracted.csv` — one row per company-year
 The standard fields (`total_assets, current_assets, current_liabilities, inventories,
@@ -127,7 +132,7 @@ all in ₹ crore, plus:
 | `pair_id, role, label, horizon, company_name` | carried from `documents_labeled.csv` |
 | `balance_check, components_check` | relative gap in the two balance-sheet identities (0 = exact) |
 | `scale_vs_cohort, scale_vs_previous_year` | total assets against the two unit-scale anchors |
-| `validation_flags, n_validation_flags` | see `docs/06_phase3_financials.md` |
+| `validation_flags, n_validation_flags` | see `docs/06_phase3_financials.md`; `<field>_exceeds_total_assets_dropped` marks an asset line larger than a balancing total, blanked |
 | `missing_fields, n_fields_found, has_core_financials` | what was and was not recovered |
 | `financials_source` | `exchange_xbrl` / `report_current_year` / `next_report_comparative` / `manual_xbrl` / `missing` |
 | `financials_missing` | True when a required field is absent — the row is still kept |
