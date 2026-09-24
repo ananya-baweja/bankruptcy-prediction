@@ -75,8 +75,31 @@ kept); PDFs are saved as `raw/annual_reports/<firm_id>/FY<year>.pdf`, the layout
   Section totals are built by adding the rows and kept only when both sides balance to rounding.
 - **Contents and corporate-information pages look like statements** to a figure counter (PIN codes,
   phone numbers, page references). Headings must end in a date, and contents entries are ignored.
-- **The CARO annexure is missed in about a third of reports** by the Phase 2 section extractor even
-  though they contain it. Fixing it is a Phase 2 change and waits for the team's approval.
+- **The CARO annexure was missed in about a third of reports** by the Phase 2 section extractor even
+  though they contain it (annexure letters vary, and the IFC annexure was taken for CARO). Fixed on
+  24 Sep with the team's approval: the annexure's own text decides what it is (185 of 210 found).
+- **Scanned reports carry their own OCR text layer**, with figures split by stray spaces
+  (`1, 255. 53`, `70 .68`); the reader closes these up before it assigns columns.
+- **A report can be damaged on the exchange itself.** BSE526550's FY2022 report is 13.9 MB of which
+  everything after the first 0.6 MB is zero bytes, on every download; it is treated as missing.
+- **Collected JSON is big.** The peers' size-year XBRL filings came to 540 MB of text (the 2025+
+  "integrated filing" format is ~200 KB per company-year). Agent 1.6 gzips before handing over (13x smaller).
+- **The unit caption is wherever the PDF put it.** On the full cohort 66 company-years were first read a
+  power of ten off the XBRL filing: the caption `(₹ in Lakhs)` came after the signature block in the
+  text layer, or inside the heading line (`Balance sheet as at 31 March 2019 (₹ in Lakhs)`), or only on
+  the profit and loss, or only in the accounting-policy note, or in a font whose text comes out as
+  `(`LQ/DNKV` (every letter shifted 29 code points). Some reports print in **hundreds**; one printed a
+  boilerplate "(All amounts in lacs)" over rupee figures, another a bare "Rs." header over lakh
+  figures. The reader now looks in all these places (`docs/06_phase3_financials.md`); 63 of the 66
+  read right, and PDF-vs-XBRL agreement within 1% went from 80.0% to 91.6%.
+- **Two XBRL filings in a row can both be wrong.** Rane (Madras) filed FY2022 and FY2023 100x too
+  small; each looked consistent with the other. The unit check now also compares with the firm's
+  filings outside the sample years and with the report's own prior-year column.
+- **Company names can tie after normalisation.** Asian Hotels (East), (North) and (West) all
+  normalise to "ASIAN HOTELS"; IBBI's insolvent Asian Hotels (West) was auto-matched to Asian Hotels
+  (East). The CIN printed in the report caught it (the only mismatch among 136 insolvent firms).
+- **A peer can be sized on a slipped filing.** P0100's peer was chosen on FY2023 total assets of
+  ₹11.78 crore from an XBRL filing 100x too small; the company is ~₹1,178 crore.
 
 ## Pilot results (27 pairs, 24 Sep 2026)
 
@@ -90,6 +113,35 @@ kept); PDFs are saved as `raw/annual_reports/<firm_id>/FY<year>.pdf`, the layout
 | Modelling rows | 160 included; 135 keep usable financials after the pair rule |
 
 `python scripts/pilot_report.py --data-dir D` writes the details to `interim/qa/pilot/`.
+
+## Full cohort results (136 pairs, 25 Sep 2026)
+
+| | |
+| --- | --- |
+| Pairs | 136 (the pilot's 27 + 109 new); 39 insolvent firms found no peer within ±30% |
+| Reports read | 1,143 (147,662 pages, 7,436 OCR'd), no failures; 1,048 belong to the cohort |
+| Insolvent firms confirmed by the CIN in their own report | 135 of 136 (127 exact, 6 same registration number, 2 AP to TG); P0093 is a wrong match |
+| Leakage review | 62 reports read, 38 excluded (discuss a petition against the company itself) |
+| Company-years | 1,088: 727 from XBRL, 320 from the report, 26 from next year's report, 15 missing |
+| Report reader vs XBRL, within 1% | 91.6% of 10,176 figures (93.0% within 5%); 5 company-years detected as read at the wrong scale, 7 XBRL filings |
+| Unrecoverable company-years (a core figure missing) | distressed 67 of 544, healthy 49 of 544 - 95 of the 116 are FY2016-2018 |
+| Modelling rows | 729 included (367 distressed / 362 healthy); 604 keep usable financials after the pair rule |
+
+`python scripts/pilot_report.py --data-dir D --name full` writes the details to `interim/qa/full/`.
+
+### Full cohort (from 24 Sep 2026)
+
+One step per download round; the pilot's 27 pairs are kept as they are:
+
+```bash
+python scripts/exchange_pipeline.py --data-dir D full-select --jobs-out J              # 011: insolvent firms' size-year XBRL
+python scripts/exchange_pipeline.py --data-dir D full-candidates --jobs-out J          # 012: possible peers' filing lists
+python scripts/exchange_pipeline.py --data-dir D full-distressed-reports --jobs-out J  # 019: insolvent firms' reports
+python scripts/exchange_pipeline.py --data-dir D full-sizing --jobs-out J              # 013: peers' size-year XBRL
+python scripts/exchange_pipeline.py --data-dir D full-shortlist --jobs-out J           # 014: report lists within +/-30%
+python scripts/exchange_pipeline.py --data-dir D full-finalize --jobs-out J            # pairs, cohort.csv; 015: peers' reports
+python scripts/pilot_report.py --data-dir D --name full                                # after text, xbrl, phases, cincheck
+```
 
 ## Commands (processing session)
 

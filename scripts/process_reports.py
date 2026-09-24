@@ -14,8 +14,10 @@ import argparse
 import json
 import logging
 import os
+import re
 import sys
 import time
+from collections import Counter
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
@@ -79,17 +81,58 @@ def step_text(paths: Paths, cfg: dict, workers: int, force: bool) -> None:
     _write_summary(summ, rows)
 
 
-def step_cincheck(paths: Paths, n_pages: int = 12) -> None:
+#: a CIN as printed or OCR'd: "L 141030R2000PLC006230" is L14103OR2000PLC006230
+_CIN_LOOSE = re.compile(r"\b([LU])\s?([\dO]{5})\s?([A-Z0]{2})\s?([\dO]{4})\s?([A-Z]{3})\s?([\dO]{6})\b")
+
+
+def _cins(text: str) -> Counter:
+    """Every CIN in a report, OCR's O-for-0 slips undone, with how often it is printed."""
+    out: Counter = Counter()
+    for m in _CIN_LOOSE.finditer(text.upper()):
+        lu, nic, state, year, kind, reg = m.groups()
+        digits = str.maketrans("O", "0")
+        out[lu + nic.translate(digits) + state.replace("0", "O") + year.translate(digits) + kind
+            + reg.translate(digits)] += 1
+    return out
+
+
+def report_cin_status(expected: str | None, text: str) -> tuple[str, str]:
+    """(status, CIN) for one report: confirmed | confirmed_state_changed | confirmed_reg_no |
+    mismatch | cin_not_found | no_expected_cin.
+
+    The whole report is read: the own CIN is not always within the first pages, and
+    those pages can carry a subsidiary's CIN instead (both seen on the full cohort).
+    On a mismatch the CIN printed most often is reported, not the first one.
+    """
+    found = _cins(text)
+    if not expected:
+        return "no_expected_cin", found.most_common(1)[0][0] if found else ""
+    if not found:
+        return "cin_not_found", ""
+    if expected in found:
+        return "confirmed", expected
+    # Andhra Pradesh companies became Telangana ones in 2014: the CIN's state changes,
+    # its industry code, year, type and registration number do not
+    moved = [c for c in found if c[6:8] != expected[6:8] and c[1:6] == expected[1:6] and c[8:] == expected[8:]]
+    if moved:
+        return "confirmed_state_changed", moved[0]
+    # a change of listing status or company type keeps the registration number and year
+    same_reg = [c for c in found if c[-6:] == expected[-6:] and c[8:12] == expected[8:12]]
+    if same_reg:
+        return "confirmed_reg_no", same_reg[0]
+    return "mismatch", found.most_common(1)[0][0]
+
+
+def step_cincheck(paths: Paths) -> None:
     """Confirm each insolvent firm's listing with the CIN printed in its own report."""
-    from bpp.cohort.cin_match import confirm_with_report_cin
     cohort = pd.read_csv(paths.processed / "cohort.csv", dtype=str)
     rows = []
     for _, c in cohort[cohort["role"] == "distressed"].iterrows():
         checks = []
         for f in sorted(paths.pages.glob(f"{c['firm_id']}_FY*.json")):
             pj = json.loads(f.read_text(encoding="utf-8"))
-            text = "\n".join(p["text"] for p in pj["pages"][:n_pages])
-            status, found = confirm_with_report_cin(c.get("cin"), text)
+            text = "\n".join(p["text"] for p in pj["pages"])
+            status, found = report_cin_status(c.get("cin") if isinstance(c.get("cin"), str) else None, text)
             checks.append((pj["fy"], status, found))
         best = next((x for x in checks if x[1].startswith("confirmed")), checks[0] if checks else (None, "no_report", ""))
         rows.append({"pair_id": c["pair_id"], "firm_id": c["firm_id"], "company_name": c["company_name"],
@@ -101,15 +144,29 @@ def step_cincheck(paths: Paths, n_pages: int = 12) -> None:
     log.info("report CIN check: %s", out["report_cin_check"].value_counts().to_dict())
 
 
-def step_phases(paths: Paths, cfg: dict) -> None:
+def _cohort_doc_ids(paths: Paths) -> list[str] | None:
+    """Reports of the cohort's firms (any year); None when there is no cohort yet."""
+    cohort = paths.processed / "cohort.csv"
+    if not cohort.exists():
+        return None
+    firms = set(pd.read_csv(cohort, dtype=str)["firm_id"])
+    ids = sorted(p.stem for p in paths.pages.glob("*.json") if p.stem.rsplit("_FY", 1)[0] in firms)
+    return ids or None
+
+
+def step_phases(paths: Paths, cfg: dict, workers: int = 1) -> None:
+    """Phases 2-4 on the cohort's reports. Reports of firms that found no peer are
+    downloaded too (the insolvent firms' reports come before pairing) but left out here."""
     from bpp.cohort.labels import run_assign_labels
     from bpp.extract.sections import run_extract_sections
     from bpp.features.financials import run_financials
     from bpp.nlp.features import run_language_features
-    run_extract_sections(cfg, paths)
+    ids = _cohort_doc_ids(paths)
+    log.info("Phases 2-4 on %s reports", len(ids) if ids else "all")
+    run_extract_sections(cfg, paths, ids)
     run_assign_labels(cfg, paths)
-    run_financials(cfg, paths)
-    run_language_features(cfg, paths)
+    run_financials(cfg, paths, ids, workers=workers)
+    run_language_features(cfg, paths, ids)
 
 
 def main() -> None:
@@ -128,7 +185,7 @@ def main() -> None:
     elif a.step == "cincheck":
         step_cincheck(paths)
     else:
-        step_phases(paths, cfg)
+        step_phases(paths, cfg, a.workers)
 
 
 if __name__ == "__main__":

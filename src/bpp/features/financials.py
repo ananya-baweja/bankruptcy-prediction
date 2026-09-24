@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import json
 import logging
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -45,10 +46,11 @@ from tqdm import tqdm
 
 from bpp.common import read_csv, write_csv
 from bpp.config import Paths
-from bpp.features.numbers import TO_CRORE, infer_unit_from_magnitude
+from bpp.features.numbers import (TO_CRORE, infer_unit_from_magnitude, rupee_reading_implausible,
+                                  scale_contradicted_by_magnitude)
 from bpp.features.ratios import (INDICATOR_FIELDS, RATIO_FIELDS, compute_ratios)
 from bpp.features.statements import (FIELD_STATEMENT, STANDARD_FIELDS, FieldHit,
-                                     best_hits, extract_table_rows, locate_statements,
+                                     best_hits, extract_table_rows, locate_statements, report_unit,
                                      map_statement, parse_statement_lines, rows_to_line_items)
 
 log = logging.getLogger(__name__)
@@ -97,17 +99,25 @@ def extract_document(pages_json: dict[str, Any], cfg: dict[str, Any],
         # rupees with no caption, and read at the default scale every figure is
         # 10^7 too large (seen on real reports). Whole numbers in the hundreds of
         # thousands settle it; anything less certain keeps the default and its flag.
-        if loc.unit_confidence <= 0.2:
-            inferred = infer_unit_from_magnitude([f.printed for it in items for f in it.figures if f.ok])
+        printed = [f.printed for it in items for f in it.figures if f.ok]
+        # a unit taken from another page (another statement, the notes) is a presumption
+        # too: one report printed its balance sheet in rupees and its cash flow in lakhs
+        borrowed = any(flag.startswith("unit_from_") for flag in loc.flags)
+        if loc.unit_confidence <= 0.2 or (borrowed and loc.unit != "rupee"):
+            inferred = infer_unit_from_magnitude(printed)
             if inferred and inferred != loc.unit:
-                factor = TO_CRORE[inferred]
-                for it in items:
-                    for f in it.figures:
-                        if f.ok and f.printed is not None:
-                            f.value = round(f.printed * factor, 9)
-                            f.unit = inferred
-                loc.flags.append(f"unit_inferred_{inferred}_from_magnitude")
-                loc.unit, loc.unit_confidence = inferred, 0.6
+                _rescale(items, loc, inferred, 0.6, f"unit_inferred_{inferred}_from_magnitude")
+        elif loc.unit in ("lakh", "crore", "million", "billion") and scale_contradicted_by_magnitude(printed):
+            # "(All amounts in lacs...)" over "13,16,32,774.00": the caption is boilerplate
+            _rescale(items, loc, "rupee", 0.6, "unit_caption_contradicted_by_magnitude")
+        elif loc.unit == "rupee" and loc.unit_confidence < 0.9 and rupee_reading_implausible(printed):
+            # a bare "Rs. Rs." column header over figures that never reach one lakh: no
+            # listed company's balance sheet totals under Rs 1 lakh, so the notes decide
+            from_notes = report_unit(pages, loc.start_page, min_captions=1)
+            if from_notes and from_notes[0] != "rupee":
+                _rescale(items, loc, from_notes[0], 0.6, "unit_rupee_header_implausible")
+                loc.flags.append(from_notes[3])
+                loc.unit_source = from_notes[2]
 
         statement_hits = map_statement(items, loc)
         for hit in statement_hits:
@@ -135,6 +145,18 @@ def extract_document(pages_json: dict[str, Any], cfg: dict[str, Any],
         "n_hits": len(hits),
     }
     return hits, report
+
+
+def _rescale(items: list, loc: Any, unit: str, confidence: float, flag: str) -> None:
+    """Re-read every figure of one statement in another unit, and say so."""
+    factor = TO_CRORE[unit]
+    for it in items:
+        for f in it.figures:
+            if f.ok and f.printed is not None:
+                f.value = round(f.printed * factor, 9)
+                f.unit = unit
+    loc.flags.append(flag)
+    loc.unit, loc.unit_confidence = unit, confidence
 
 
 # --------------------------------------------------------------------------- assembling years
@@ -168,9 +190,27 @@ def _hit_row(hit: FieldHit, doc_id: str, report_fy: int | None, statements: dict
     }
 
 
-def collect_figures(paths: Paths, cfg: dict[str, Any],
-                    doc_ids: list[str] | None = None) -> tuple[pd.DataFrame, list[dict]]:
-    """Read every available report and return one row per (firm-year, field, source)."""
+def _read_statements(args: tuple[str, str, dict[str, Any]]) -> tuple[str, list[dict[str, Any]] | None, dict]:
+    """One report's figures (top level so a process pool can run it)."""
+    path_str, pdf, cfg = args
+    path = Path(path_str)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    pdf = pdf or payload.get("source_pdf", "")
+    try:
+        hits, report = extract_document(payload, cfg, pdf or None)
+    except Exception as exc:                                       # noqa: BLE001
+        return path.stem, None, {"doc_id": path.stem, "error": str(exc)}
+    chosen = best_hits(hits)
+    rows = [_hit_row(hit, payload["doc_id"], report["fy"], report["statements"]) for hit in chosen.values()]
+    return path.stem, rows, report
+
+
+def collect_figures(paths: Paths, cfg: dict[str, Any], doc_ids: list[str] | None = None,
+                    workers: int = 1) -> tuple[pd.DataFrame, list[dict]]:
+    """Read every available report and return one row per (firm-year, field, source).
+
+    ``workers`` > 1 reads reports in parallel processes; the result is the same, in the same order.
+    """
     files = sorted(paths.pages.glob("*.json"))
     if doc_ids:
         wanted = set(doc_ids)
@@ -185,20 +225,22 @@ def collect_figures(paths: Paths, cfg: dict[str, Any],
         if {"doc_id", "local_path"} <= set(manifest.columns):
             local_paths = dict(zip(manifest["doc_id"], manifest["local_path"].fillna("")))
 
+    jobs = [(str(f), local_paths.get(f.stem, ""), cfg) for f in files]
+    if workers > 1:
+        from concurrent.futures import ProcessPoolExecutor
+        with ProcessPoolExecutor(max_workers=workers) as ex:
+            results = list(tqdm(ex.map(_read_statements, jobs, chunksize=4), total=len(jobs),
+                                desc="read statements"))
+    else:
+        results = [_read_statements(j) for j in tqdm(jobs, desc="read statements")]
+
     rows: list[dict[str, Any]] = []
     reports: list[dict[str, Any]] = []
-    for path in tqdm(files, desc="read statements"):
-        payload = json.loads(path.read_text(encoding="utf-8"))
-        pdf = local_paths.get(payload.get("doc_id", ""), "") or payload.get("source_pdf", "")
-        try:
-            hits, report = extract_document(payload, cfg, pdf or None)
-        except Exception as exc:                                   # noqa: BLE001
-            log.error("could not read statements in %s: %s", path.stem, exc)
-            reports.append({"doc_id": path.stem, "error": str(exc)})
-            continue
-        chosen = best_hits(hits)
-        for hit in chosen.values():
-            rows.append(_hit_row(hit, payload["doc_id"], report["fy"], report["statements"]))
+    for stem, doc_rows, report in results:
+        if doc_rows is None:
+            log.error("could not read statements in %s: %s", stem, report.get("error"))
+        else:
+            rows.extend(doc_rows)
         reports.append(report)
 
     figures = pd.DataFrame(rows)
@@ -271,6 +313,11 @@ def xbrl_unit_checks(figures: pd.DataFrame, exchange: pd.DataFrame) -> dict[tupl
     * off by such a factor but the report's unit was assumed or inferred:
       ``pdf_unit_suspect`` - the XBRL wins, as it would anyway;
     * XBRL total assets above Rs 20 lakh crore: ``xbrl_unit_suspect`` outright.
+
+    The report's figure is its own-year column, or, when that report is missing,
+    next year's report's prior-year column (a year with only the comparative was
+    otherwise never checked: on the full cohort one firm's two XBRL filings 100x
+    too small went straight into the data).
     """
     out: dict[tuple[str, int], str] = {}
     if exchange is None or exchange.empty:
@@ -281,6 +328,7 @@ def xbrl_unit_checks(figures: pd.DataFrame, exchange: pd.DataFrame) -> dict[tupl
     pdf = ta_figs[ta_figs["source"] == SOURCE_PRIMARY] if len(ta_figs) else ta_figs
     pdf_lookup = {(r["firm_id"], int(r["fy"])): r for _, r in pdf.iterrows()} if len(pdf) else {}
     comp = ta_figs[ta_figs["source"] == SOURCE_COMPARATIVE] if len(ta_figs) else ta_figs
+    comp_rows = {(r["firm_id"], int(r["fy"])): r for _, r in comp.iterrows()} if len(comp) else {}
     # comparative rows keyed by the report they were read from, and by the year they describe
     comp_by_doc = {(r["source_doc_id"], int(r["fy"])): float(r["value_cr"]) for _, r in comp.iterrows()} \
         if len(comp) else {}
@@ -296,6 +344,9 @@ def xbrl_unit_checks(figures: pd.DataFrame, exchange: pd.DataFrame) -> dict[tupl
             out[key] = "xbrl_unit_suspect"
             continue
         p = pdf_lookup.get(key)
+        primary = p is not None
+        if p is None:
+            p = comp_rows.get(key)
         if p is None or not xv or not float(p["value_cr"]):
             continue
         pv = float(p["value_cr"])
@@ -303,16 +354,25 @@ def xbrl_unit_checks(figures: pd.DataFrame, exchange: pd.DataFrame) -> dict[tupl
         power = int(round(k))
         if not (abs(power) in _UNIT_POWERS and abs(k - power) < 0.05):
             continue
+
+        def in_line(value: float, year: int) -> bool:
+            other = x_lookup.get((firm_id, year))
+            return bool(other) and abs(other) <= _IMPLAUSIBLE_ASSETS_CR and 1 / 3 <= value / other <= 3
+
         # Which side slipped? Evidence independent of the unit caption, which can
         # itself be misread (a lakh statement read as crore made every figure 100x):
         # * the report's scale holds if its own prior-year column matches last
-        #   year's XBRL, or next year's report prints the same figure for this year;
+        #   year's XBRL, or next year's report prints the same figure for this year,
+        #   or the figure is in line with the filings for the neighbouring years;
         # * the XBRL's scale holds if the filing is in line with the firm's
         #   filings for the neighbouring years.
-        pdf_ok = (close(comp_by_doc.get((p["source_doc_id"], fy - 1)), x_lookup.get((firm_id, fy - 1)))
-                  or close(pv, comp_by_year.get(key)))
-        xbrl_ok = any(x_lookup.get((firm_id, fy + d)) and 1 / 3 <= xv / x_lookup[(firm_id, fy + d)] <= 3
-                      for d in (-1, 1))
+        # Two slipped filings in a row back each other up, so both can hold; the
+        # printed caption then decides.
+        pdf_ok = ((primary and close(comp_by_doc.get((p["source_doc_id"], fy - 1)),
+                                     x_lookup.get((firm_id, fy - 1))))
+                  or (primary and close(pv, comp_by_year.get(key)))
+                  or any(in_line(pv, fy + d) for d in (-1, 1)))
+        xbrl_ok = any(in_line(xv, fy + d) for d in (-1, 1))
         if pdf_ok and not xbrl_ok:
             out[key] = "xbrl_unit_suspect"
         elif xbrl_ok and not pdf_ok:
@@ -425,9 +485,26 @@ def arbitrate_by_identities(resolved: pd.DataFrame, conflict_tol: float = 0.05) 
     return out
 
 
+def _pdf_unit_suspect_docs(figures: pd.DataFrame, unit_checks: dict[tuple[str, int], str]) -> set[str]:
+    """The reports whose total assets were found a power of ten off the filing."""
+    keys = {k for k, v in unit_checks.items() if v == "pdf_unit_suspect"}
+    if not keys or figures.empty:
+        return set()
+    ta = figures[figures["field"] == "total_assets"]
+    docs: set[str] = set()
+    for key in keys:
+        rows = ta[(ta["firm_id"] == key[0]) & (ta["fy"].astype(int) == key[1])]
+        for source in (SOURCE_PRIMARY, SOURCE_COMPARATIVE):      # the figure the check used
+            hit = rows[rows["source"] == source]
+            if len(hit):
+                docs.add(str(hit.iloc[0]["source_doc_id"]))
+                break
+    return docs
+
+
 def resolve_figures(figures: pd.DataFrame, xbrl: pd.DataFrame,
-                    cfg: dict[str, Any], exchange: pd.DataFrame | None = None
-                    ) -> tuple[pd.DataFrame, pd.DataFrame]:
+                    cfg: dict[str, Any], exchange: pd.DataFrame | None = None,
+                    evidence: pd.DataFrame | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Apply the as-first-published rule and the gap-filling order.
 
     Returns ``(resolved, audit)``: one row per (firm_id, fy, field) with the
@@ -441,11 +518,16 @@ def resolve_figures(figures: pd.DataFrame, xbrl: pd.DataFrame,
       manual XBRL. The report's own figure is still read and kept next to the
       XBRL one (``pdf_value_cr``, ``xbrl_pdf_diff``), which measures how accurate
       the PDF reader is on exactly the years where both exist.
+
+    ``evidence`` is every exchange filing of the same firms, the years outside the
+    sample included: the unit checks compare a filing with its neighbours, and the
+    neighbour of a sample year is often not a sample year itself.
     """
     tol = cfg["financials"]["restatement_tolerance"]
     priority = cfg["financials"].get("xbrl_priority", "gap_fill")
     exchange = exchange if exchange is not None else pd.DataFrame(columns=["firm_id", "fy", "field", "value_cr"])
-    unit_checks = xbrl_unit_checks(figures, exchange) if len(exchange) else {}
+    unit_checks = (xbrl_unit_checks(figures, evidence if evidence is not None and len(evidence) else exchange)
+                   if len(exchange) else {})
     # an XBRL filing in the wrong unit is not used at all for that firm-year
     exchange = exchange[[unit_checks.get((f, int(y))) != "xbrl_unit_suspect"
                          for f, y in zip(exchange["firm_id"], exchange["fy"])]] if len(exchange) else exchange
@@ -459,6 +541,7 @@ def resolve_figures(figures: pd.DataFrame, xbrl: pd.DataFrame,
         for key in stale:
             unit_checks.setdefault(key, "xbrl_stale_copy_pl")
     exch_lookup = {(r["firm_id"], int(r["fy"]), r["field"]): r for _, r in exchange.iterrows()}
+    suspect_docs = _pdf_unit_suspect_docs(figures, unit_checks)
     audit = figures.copy()
     resolved_rows: list[dict[str, Any]] = []
     dropped_pdf_unit = 0
@@ -486,12 +569,16 @@ def resolve_figures(figures: pd.DataFrame, xbrl: pd.DataFrame,
             continue
 
         key = (firm_id, int(fy), fieldname)
-        if (key not in exch_lookup and source == SOURCE_PRIMARY
-                and unit_checks.get((firm_id, int(fy))) == "pdf_unit_suspect"):
+        if key not in exch_lookup and str(chosen["source_doc_id"]) in suspect_docs:
             # this report was read at the wrong scale (its total assets are a power
-            # of ten off the filing): none of its own-year figures is usable
-            dropped_pdf_unit += 1
-            continue
+            # of ten off the filing): none of its figures is usable, in either column;
+            # next year's report's prior-year column stands in when it was read right
+            if (source == SOURCE_PRIMARY and len(comparative)
+                    and str(comparative.iloc[0]["source_doc_id"]) not in suspect_docs):
+                chosen, source = comparative.iloc[0], SOURCE_COMPARATIVE
+            else:
+                dropped_pdf_unit += 1
+                continue
         if priority == "first" and key in exch_lookup:
             x = exch_lookup[key]
             row = _xbrl_row(x, SOURCE_EXCHANGE_XBRL)
@@ -776,17 +863,20 @@ def _cohort_context(paths: Paths) -> tuple[pd.DataFrame, pd.DataFrame]:
 
 
 def build_financials(paths: Paths, cfg: dict[str, Any],
-                     doc_ids: list[str] | None = None) -> dict[str, pd.DataFrame]:
+                     doc_ids: list[str] | None = None, workers: int = 1) -> dict[str, pd.DataFrame]:
     """Run Phase 3 end to end and return every table it produces."""
-    figures, reports = collect_figures(paths, cfg, doc_ids)
+    figures, reports = collect_figures(paths, cfg, doc_ids, workers=workers)
     scope, anchor = _cohort_context(paths)
     exchange = load_exchange_xbrl(paths)
+    evidence = exchange
     if len(scope) and len(exchange) and {"firm_id", "fy"} <= set(scope.columns):
         # the exchange file also holds every candidate peer's filings (collected for
         # sizing); only the cohort's own company-years belong in this table
         wanted = set(zip(scope["firm_id"].astype(str), scope["fy"].astype(int)))
+        firms = {f for f, _ in wanted}
+        evidence = exchange[exchange["firm_id"].astype(str).isin(firms)]
         exchange = exchange[[(str(f), int(y)) in wanted for f, y in zip(exchange["firm_id"], exchange["fy"])]]
-    resolved, audit = resolve_figures(figures, load_xbrl_supplement(paths), cfg, exchange)
+    resolved, audit = resolve_figures(figures, load_xbrl_supplement(paths), cfg, exchange, evidence=evidence)
     wide = derive_missing_totals(to_wide(resolved))
 
     # --- validation, per company-year
@@ -1047,9 +1137,10 @@ def score_spot_check(paths: Paths) -> pd.DataFrame:
 
 # --------------------------------------------------------------------------- entry point
 def run_financials(cfg: dict[str, Any], paths: Paths, doc_ids: list[str] | None = None,
-                   spot_check: bool = True, overwrite_spot_check: bool = False) -> pd.DataFrame:
+                   spot_check: bool = True, overwrite_spot_check: bool = False,
+                   workers: int = 1) -> pd.DataFrame:
     """``bpp financials`` -- extract, validate, compute ratios, write every table."""
-    tables = build_financials(paths, cfg, doc_ids)
+    tables = build_financials(paths, cfg, doc_ids, workers=workers)
 
     write_csv(tables["figures"], paths.financials_figures)
     write_csv(tables["financials"], paths.financials_extracted)

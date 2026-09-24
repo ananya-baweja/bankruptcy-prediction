@@ -2,6 +2,35 @@
 
 What was done each working session, newest first. Keep entries short: what, result, next.
 
+## 2026-09-24/25 — Full cohort processed: 136 pairs, 1,048 reports, Phases 2–4
+
+**Done**
+- **Pairs:** 109 new + the pilot's 27 = 136, all in the same BSE sub-group within ±30% total assets
+  (39 insolvent firms found no peer; `interim/full_unmatched.csv`). All downloads finished: the
+  cohort's reports and every candidate peer's size-year XBRL (6,921 filings, 540 MB of JSON).
+- **Text:** 1,143 reports, 147,662 pages (7,436 OCR'd), no failures. OCR is capped at 5,000 px per page.
+- **Leakage review:** 55 more flagged reports read; 35 excluded under the pilot rule (38 of 62 in all).
+- **Phase 3 unit reading fixed** after the first run read 66 company-years a power of ten off the XBRL:
+  captions below the signatures or in the heading line, captions on another statement or in the
+  accounting-policy note, a shifted-font caption, "hundreds", a boilerplate lakh caption over rupees,
+  a bare "Rs." header over lakhs. Unit arbitration now uses all of a firm's filings and the report's
+  own comparatives. 14 regression tests. The report CIN check reads the whole report.
+- **Result:** reader vs XBRL within 1% **91.6%** of 10,176 figures (was 80.0%); 729 modelling rows
+  (367/362), 604 with usable financials after the pair rule. **Unrecoverable company-years:
+  distressed 67 of 544, healthy 49 of 544**, 95 of them FY2016–2018. 135 of 136 insolvent firms
+  confirmed by their own CIN.
+
+**Found, for the team to decide (Phase 1 inputs, not changed)**
+- P0093: IBBI's insolvent company is Asian Hotels (West) (BSE533221); the name match picked Asian
+  Hotels (East) (BSE533227), which is not insolvent. Re-match or drop the pair.
+- P0100: the peer Rane (Madras) was sized on an XBRL filing 100x too small (₹11.78 crore; really
+  ~₹1,178 crore). Pick another peer or drop the pair.
+- MAX ALERT and Dhruv Wellness found no peer because their size-year XBRL is unit-slipped (22.8 lakh
+  crore and 6.2 lakh crore); re-sizing them from their reports could add up to 2 pairs.
+
+**Next:** the team's answers on the three points above; the spot-check sheet
+(`interim/qa/financials_spot_check.csv`, 109 company-years) needs a person; then modelling.
+
 ## 2026-09-24 — Decisions taken; Phase 2 CARO/opinion fix; full cohort started
 
 **Decided (Gaurav):** keep the exclusions (financial sector, government companies, BSE group A);

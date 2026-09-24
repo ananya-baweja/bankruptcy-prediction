@@ -24,6 +24,29 @@ repeated.
 | 4 | **Map** | Line items are matched to the standard fields by pattern first, fuzzy similarity second. The score is kept. |
 | 5 | **Both columns** | The current-year **and** prior-year columns are read, so one report covers two years. |
 
+**Where the unit comes from** (in this order; found necessary on the full cohort's 1,048 reports,
+where 66 company-years were first read a power of ten off the XBRL filing):
+
+1. a caption in the first 1,500 characters of the statement's page (`(₹ in lakhs)`,
+   `(All amounts in Rupees Lakhs...)`; a currency named just before a scale word is part of the
+   caption, so "Rupees Lakhs" is lakh), or a column header that names only the currency (`Rs. Rs.`);
+2. a caption anywhere else on the page: a line that is only a caption (text layers often put it after
+   the signatures), or a bracketed caption inside another line (`Balance sheet as at 31 March 2019
+   (₹ in Lakhs)`), or a currency-only caption (`(Amount in ₹)`, `(In Rs.)`);
+3. a caption set in a font whose text layer is shifted 29 code points (`(`LQ/DNKV` is `(₹in Lakhs`);
+4. another statement of the same report and scope (the P&L carries the caption, the balance sheet not);
+5. the notes: the accounting-policy sentence (`presented in lakhs of Indian rupees`, `rounded off to
+   the nearest rupee`), else three or more agreeing table captions;
+6. the default (crore, flagged `unit_not_stated_assumed_crore`), unless the figures are large enough
+   to be rupees (a median of 1 lakh in whole numbers, or 10 lakh with paise).
+
+Units are crore, lakh, million, billion, thousand, **hundred** (`(Rs. in Hundred)`) and rupee. Two
+magnitude checks run after the figures are read: a lakh or crore caption over whole numbers with a
+median of 10 lakh or more is boilerplate, and the figures are rupees (`unit_caption_contradicted_by_magnitude`);
+a bare `Rs.` column header over figures whose 90th percentile is under 1 lakh cannot be rupees, and
+the notes' captions decide (`unit_rupee_header_implausible`). A unit taken from another page (4, 5)
+also yields to rupee magnitudes.
+
 **Standalone, not consolidated.** Consolidated statements include subsidiaries, so they are the
 wrong denominator for every ratio. The same preference already applies to the auditor's report and
 CARO (`decisions_log.md`, 2026-09-16). A report that only has consolidated statements is used and
@@ -93,7 +116,8 @@ the pair-matched design survives; if it is large on the distressed side, say so 
 | …and the gap matches a unit conversion | `possible_unit_confusion` |
 | figures that cannot be negative | `negative_<field>` |
 | the page carries too few figures to be a statement | `few_money_lines_on_page` |
-| two different scales both look like captions | `unit_ambiguous_read_as_<unit>` |
+| two different scales both look like captions, or the unit came from another page | `unit_ambiguous_read_as_<unit>` |
+| where a unit not printed at the top was found | `unit_caption_found_below_statement`, `unit_caption_decoded_from_shifted_font`, `unit_from_<statement>`, `unit_from_accounting_policy_note`, `unit_from_note_captions`, `unit_inferred_rupee_from_magnitude` |
 | the first money column is not the report's own year | `first_column_is_not_the_report_year` |
 
 A wrong unit is the error that still looks plausible — every ratio computes, the firm is simply

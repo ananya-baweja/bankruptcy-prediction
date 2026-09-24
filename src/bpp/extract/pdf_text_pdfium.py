@@ -59,10 +59,25 @@ except ImportError:  # PyMuPDF missing: same rules, copied
         return _tesseract_ok
 
 
+#: longest side of a page image sent to OCR. A4 at 300 dpi is 3,508 px, A3 4,961 px. Some scanned
+#: reports declare each page as large as its pixel count (one: 3,750 x 5,000 points, i.e. 52 x 69
+#: inches); at 300 dpi that is a 326-megapixel image, 4x upsampled, ~10 s of OCR per page for no gain.
+MAX_OCR_SIDE_PX = 5000
+
+
+def ocr_scale(width_pt: float, height_pt: float, dpi: int) -> float:
+    """Render scale for OCR: ``dpi``, unless that makes the page image longer than MAX_OCR_SIDE_PX."""
+    scale = dpi / 72
+    longest = max(width_pt, height_pt)
+    if longest * scale > MAX_OCR_SIDE_PX:
+        scale = MAX_OCR_SIDE_PX / longest
+    return scale
+
+
 def _ocr(page: Any, dpi: int, lang: str) -> str:
     import pytesseract
 
-    img = page.render(scale=dpi / 72).to_pil()
+    img = page.render(scale=ocr_scale(*page.get_size(), dpi)).to_pil()
     return pytesseract.image_to_string(img, lang=lang)
 
 

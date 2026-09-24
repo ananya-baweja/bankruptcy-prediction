@@ -32,6 +32,7 @@ TO_CRORE: dict[str, float] = {
     "million": 1e-1,
     "billion": 1e2,
     "thousand": 1e-4,
+    "hundred": 1e-5,
     "rupee": 1e-7,
 }
 
@@ -43,8 +44,11 @@ _UNIT_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("billion", re.compile(r"\bbillions?\b|\bbn\b", re.I)),
     ("million", re.compile(r"\bmillions?\b|\bmn\b|\bmio\b", re.I)),
     ("thousand", re.compile(r"\bthousands?\b|'000|’000|\bin\s+000'?s?\b", re.I)),
+    # "(` in Hundreds)", "(Rs.in Hundred)": rare, and only believed as a caption
+    ("hundred", re.compile(r"\bhundreds?\b", re.I)),
+    # "`" is how the Rupee Foradian font's ₹ comes out of a text layer: "(Amount in `)"
     ("rupee", re.compile(r"\bin\s+rupees\b|\bin\s+absolute\s+(?:terms|figures)\b|"
-                         r"\bamounts?\s+in\s+(?:rs\.?|₹)\s*\)|\bin\s+units\b", re.I)),
+                         r"\bamounts?\s+in\s+(?:rs\.?|₹|`)\s*\)|\bin\s+units\b", re.I)),
 ]
 
 #: cells that mean "no figure", not "zero"
@@ -121,7 +125,7 @@ def rupee_column_header(text: str, max_lines: int = 25) -> bool:
         line = line.strip()
         if len(line) < 3 or not _RUPEE_WORD.search(line):
             continue
-        if re.search(r"crore|lakh|lac|million|thousand|'000|billion", line, re.I):
+        if re.search(r"crore|lakh|lac|million|thousand|hundred|'000|billion", line, re.I):
             return False
         if _RUPEE_HEADER.match(line) and len(_RUPEE_WORD.findall(line)) >= 1:
             return True
@@ -145,7 +149,42 @@ def infer_unit_from_magnitude(printed: list[float]) -> str | None:
     whole = sum(1 for v in vals if float(v).is_integer()) / len(vals)
     if median >= 1e5 and whole >= 0.8:
         return "rupee"
+    if median >= 1e6:
+        # rupees and paise ("7889733.73"): half the line items at ten lakh or more
+        # of a lakh or crore unit would be one of India's largest balance sheets
+        return "rupee"
     return None
+
+
+def scale_contradicted_by_magnitude(printed: list[float]) -> bool:
+    """True when figures under a lakh or crore caption are plainly whole rupees.
+
+    Found on a real report: "(All amounts in lacs unless otherwise stated)" printed
+    over "13,16,32,774.00" -- boilerplate caption, rupee figures, and every value
+    read 10^5 too large. A median line item of ten lakh *lakhs* (Rs 10,000 crore)
+    printed as whole numbers is not a statement in lakhs; it is rupees.
+    """
+    vals = [abs(v) for v in printed if v is not None and v != 0]
+    if len(vals) < 5:
+        return False
+    vals.sort()
+    median = vals[len(vals) // 2]
+    whole = sum(1 for v in vals if float(v).is_integer()) / len(vals)
+    return median >= 1e7 or (median >= 1e6 and whole >= 0.6)
+
+
+def rupee_reading_implausible(printed: list[float]) -> bool:
+    """True when figures read as rupees are too small for any listed company.
+
+    A bare "Rs. Rs." column header over "3,015.30" and "2,455.84" (a real report,
+    whose notes are captioned "Rs. In Lakhs"): read as rupees, the whole balance
+    sheet would total a few thousand rupees. The 90th percentile is used rather
+    than the maximum, which is often a stray membership or registration number.
+    """
+    vals = sorted(abs(v) for v in printed if v is not None and v != 0)
+    if len(vals) < 5:
+        return False
+    return vals[int(0.9 * (len(vals) - 1))] < 1e5
 
 
 def detect_unit(text: str, default: str = "crore") -> tuple[str, float]:
@@ -175,6 +214,8 @@ def detect_unit(text: str, default: str = "crore") -> tuple[str, float]:
             qualified = bool(_SCALE_QUALIFIER.search(hay[max(0, match.start() - 30):match.start()]))
             if len(token) <= 3 and not qualified:
                 continue                       # "Cr", "Mn", "Bn" on their own prove nothing
+            if name == "hundred" and not qualified:
+                continue                       # "one hundred" in prose is not a scale
             found.append((match.start(), name, qualified))
     if not found:
         if rupee_column_header(hay):
@@ -182,6 +223,11 @@ def detect_unit(text: str, default: str = "crore") -> tuple[str, float]:
         return default, 0.20
 
     found.sort()
+    # "Rupees in lakhs", "Rupees Lakhs", "INR' lakhs": the currency named just before a
+    # scale word is part of the same caption and the scale governs (these read as rupees
+    # and put every figure 10^5 too low, on real reports)
+    scales = [f for f in found if f[1] != "rupee"]
+    found = [f for f in found if not (f[1] == "rupee" and any(0 < g[0] - f[0] <= 25 for g in scales))]
     qualified = [f for f in found if f[2]]
     pool = qualified or found
     units = {name for _, name, _ in pool}
