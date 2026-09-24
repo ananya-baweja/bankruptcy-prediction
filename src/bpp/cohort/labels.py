@@ -17,7 +17,10 @@ This is where most data leakage is prevented, so the rules are explicit:
    Only ``n_years_before`` are kept.
 5. Review flag. Distressed reports whose text contains CIRP-specific terms
    (resolution professional, committee of creditors, section 7/9/10 petition)
-   are flagged ``needs_leakage_review`` for a person to read.
+   are flagged ``needs_leakage_review`` for a person to read. The outcome goes in
+   ``data/manual/leakage_review.csv`` (``doc_id, decision (exclude|keep), reason``):
+   an excluded report gets ``exclude_reason = leakage_review_excluded`` (and its
+   pair partner's year follows it out, rule 3); a reviewed report is no longer flagged.
 
 Outputs: data/processed/documents_labeled.csv and data/processed/missing_reports.csv
 (missing or late filing is itself a distress signal we will use later).
@@ -52,7 +55,8 @@ def _section_summary(paths: Paths, doc_id: str) -> dict[str, Any]:
 
 
 def assign_labels(frame: pd.DataFrame, documents: pd.DataFrame, cohort: pd.DataFrame,
-                  cfg: dict[str, Any], section_info: dict[str, dict[str, Any]] | None = None
+                  cfg: dict[str, Any], section_info: dict[str, dict[str, Any]] | None = None,
+                  leakage_review: dict[str, str] | None = None
                   ) -> tuple[pd.DataFrame, pd.DataFrame]:
     lcfg, n_keep = cfg["labels"], cfg["cohort"]["n_years_before"]
     excl_days = lcfg["exclude_within_days_of_admission"]
@@ -85,6 +89,9 @@ def assign_labels(frame: pd.DataFrame, documents: pd.DataFrame, cohort: pd.DataF
     reasons[too_close & (reasons == "")] = f"published_within_{excl_days}d_of_admission"
     after_pet = df["has_document"] & df["petition_date"].notna() & (df["pub_date"] >= df["petition_date"])
     reasons[after_pet & (reasons == "")] = "published_after_petition"
+    leakage_review = leakage_review or {}
+    reviewed_out = df["doc_id"].map(lambda d: leakage_review.get(d) == "exclude")
+    reasons[reviewed_out & (reasons == "")] = "leakage_review_excluded"
     df["exclude_reason"] = reasons
 
     if lcfg["keep_pairs_aligned"]:
@@ -113,9 +120,10 @@ def assign_labels(frame: pd.DataFrame, documents: pd.DataFrame, cohort: pd.DataF
 
     extra = pd.DataFrame([{"doc_id": d, **section_info.get(d, {})} for d in df["doc_id"]])
     df = df.merge(extra, on="doc_id", how="left")
+    df["leakage_review"] = df["doc_id"].map(lambda d: leakage_review.get(d, ""))
     if "cirp_specific_mentions" in df:
         df["needs_leakage_review"] = (df["label"] == 1) & (df["cirp_specific_mentions"].fillna(0) > 0) \
-                                     & (df["exclude_reason"] == "")
+                                     & (df["exclude_reason"] == "") & (df["leakage_review"] == "")
     df["included"] = df["exclude_reason"] == ""
 
     missing = df[~df["has_document"]][["pair_id", "firm_id", "company_name", "role", "fy",
@@ -130,7 +138,13 @@ def run_assign_labels(cfg: dict[str, Any], paths: Paths) -> pd.DataFrame:
         columns=["doc_id", "status", "source", "local_path", "pub_date"])
     frame["doc_id"] = [doc_id_for(f, y) for f, y in zip(frame["firm_id"], frame["fy"])]
     info = {d: _section_summary(paths, d) for d in frame["doc_id"]}
-    df, missing = assign_labels(frame, documents, cohort, cfg, info)
+    review: dict[str, str] = {}
+    if paths.leakage_review.exists():
+        rv = pd.read_csv(paths.leakage_review, dtype=str)
+        review = {d: str(x).strip().lower() for d, x in zip(rv["doc_id"], rv["decision"]) if pd.notna(x)}
+        log.info("leakage review: %d reports read, %d excluded", len(review),
+                 sum(v == "exclude" for v in review.values()))
+    df, missing = assign_labels(frame, documents, cohort, cfg, info, review)
     write_csv(df, paths.documents_labeled)
     write_csv(missing, paths.missing_reports)
     inc = df[df["included"]]

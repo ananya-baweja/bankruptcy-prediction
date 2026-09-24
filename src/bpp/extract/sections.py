@@ -55,13 +55,15 @@ TARGET_SECTIONS = ["mdna", "directors_report", "auditor_report", "caro_annexure"
 AUDITOR_SUBSECTIONS = ["basis_for_modified_opinion", "going_concern", "emphasis_of_matter"]
 
 _AUD = r"auditor(?:'s|s'|s)?"
-_ANNEX_LABEL = r"annexure\s*[-:]?\s*['\"(]?\s*{x}\s*['\")]?\s*[-:]?\s*(?:to|of|referred\s+to\s+in)\s+(?:the\s+)?"
+_ANNEX_LABEL = r"annexure\s*[-:.]?\s*['\"(]?\s*{x}\s*['\")]?\s*[-:]?\s*(?:to|of|referred\s+to\s+in)\s+(?:the\s+)?"
 
 # (section, regex). Tried in order against the start of a heading candidate.
 MAJOR_PATTERNS: list[tuple[str, str]] = [
-    ("caro_annexure", _ANNEX_LABEL.format(x="a") + r"(?:independent\s+)?" + _AUD),
-    ("caro_annexure", r"annexure\s*[-:]?\s*['\"(]?\s*a\s*['\")]?\s*$"),          # "Annexure A" alone, joined later
-    ("ifc_annexure", _ANNEX_LABEL.format(x="b") + r"(?:independent\s+)?" + _AUD),
+    ("caro_annexure", _ANNEX_LABEL.format(x="(?:a|1|i)") + r"(?:independent\s+)?" + _AUD),
+    ("caro_annexure", r"annexure\s*[-:.]?\s*['\"(]?\s*(?:a|1|i)\s*['\")]?\s*$"),   # "Annexure A" alone, joined later
+    ("ifc_annexure", _ANNEX_LABEL.format(x="(?:b|2|ii)") + r"(?:independent\s+)?" + _AUD),
+    # "Annexure to the Auditors' Report": no label - which one it is, the text decides
+    ("caro_annexure", r"annexure\s*[-:]?\s*(?:to|of|referred\s+to\s+in)\s+(?:the\s+)?(?:independent\s+)?" + _AUD),
     ("auditor_report", r"independent\s+" + _AUD + r"\s+report"),
     ("auditor_report", _AUD + r"\s+report\s+to\s+the\s+members"),
     ("mdna", r"management(?:'s)?\s+discussion\s*(?:and|&)\s*analysis"),
@@ -106,6 +108,35 @@ _CROSSREF = re.compile(
     r"separate\s+section|appended)\b", re.I)
 
 _REFERS_TO_DOC = re.compile(r"\b(report|section|annexure|annual\s+report)\b", re.I)
+
+#: what the CARO annexure talks about, and what the internal-financial-controls one does.
+#: Auditors letter them either way round (CARO as "A" or "B", or "1", "I", or not at all),
+#: so the text, not the letter, decides which is which.
+_CARO_TEXT = re.compile(
+    r"auditor'?s?'?\s*report\)\s*order|paragraphs?\s*3\s*(?:and|&)\s*4\s*of\s*the\s*(?:said\s+)?order"
+    r"|physically\s+verified|title\s+deeds|statutory\s+dues|default\s+in\s+(?:the\s+)?repayment"
+    r"|wilful\s+defaulter|tax\s+assessments|initial\s+public\s+offer|fraud\s+(?:by|on)\s+the\s+company"
+    r"|nidhi\s+company|section\s*45-?\s*ia|managerial\s+remuneration|cost\s+records",
+    re.I)
+_IFC_TEXT = re.compile(
+    r"internal\s+financial\s+controls?\s+(?:over|with\s+reference\s+to)\s+financial\s+(?:reporting|statements)"
+    r"|section\s*143\s*\(\s*3\s*\)\s*\(\s*i\s*\)|clause\s*\(i\)\s*of\s*sub[-\s]*section\s*\(?3\)?\s*of\s*section\s*143",
+    re.I)
+
+
+def annexure_kind(following_text: str) -> str | None:
+    """``caro_annexure``, ``ifc_annexure`` or None, from the text under an annexure heading."""
+    head = following_text[:4000]
+    nxt = re.search(r"\n\s*[\"'“‘\[]?\s*annexure\b", head[10:], re.I)     # stop at the next annexure
+    if nxt:
+        head = head[:10 + nxt.start()]
+    caro = len(_CARO_TEXT.findall(head))
+    ifc = len(_IFC_TEXT.findall(head[:1500]))
+    if caro >= 2 and caro >= ifc:
+        return "caro_annexure"
+    if ifc >= 1:
+        return "ifc_annexure"
+    return "caro_annexure" if caro == 1 else None
 
 
 def _is_crossref(rest_of_heading: str, first_sentence: str) -> bool:
@@ -175,7 +206,9 @@ def _classify_heading(candidate: str, compiled: list[tuple[str, re.Pattern]] = _
                       allow_prefix_strip: bool = True) -> tuple[str, str] | None:
     """Return (section, rest_of_line) if the candidate looks like a known heading."""
     cand = re.sub(r"\s+", " ", candidate).strip().strip("*#|:-").strip()
-    if not cand or len(cand) > 140:
+    cand = re.sub(r"^\[[^\]]{0,40}\]\s*", "", cand)                       # "[CIN: L25200...] Annexure 'A' ..."
+    cand = cand.lstrip("\"'“”‘’ ")
+    if not cand or len(cand) > 160:
         return None
     variants = [(cand, False)]
     stripped = _NUMBERING.sub("", cand)
@@ -229,7 +262,19 @@ def find_heading_hits(text: str, starts: list[int], compiled=_COMPILED,
         if found is not None:
             section, rest = found
             bare_annex = section == "caro_annexure" and not used_two and rest.strip() == ""
-            if _is_heading_rest(rest) and not bare_annex:
+            if section in ("caro_annexure", "ifc_annexure"):
+                # the letter does not say which annexure it is; the text under it does. A
+                # bare "Annexure A" is taken only when that text is an auditor's annexure
+                # ("The Annexure referred to in paragraph 1 ..." follows it, not a heading).
+                kind = annexure_kind(text[offsets[i]:offsets[i] + 4500])
+                if kind is not None:
+                    section, bare_annex = kind, False
+                elif bare_annex or not re.search(_AUD, line + " " + next_line, re.I):
+                    i += 1
+                    continue
+            annex_rest_ok = section in ("caro_annexure", "ifc_annexure") and len(rest.strip()) <= 120 \
+                and not _SENTENCE_WORDS.search(rest)
+            if (_is_heading_rest(rest) or annex_rest_ok) and not bare_annex:
                 follow = text[offsets[i] + len(lines[i]):offsets[i] + len(lines[i]) + 450]
                 follow = re.split(r"(?<=[a-z]{3})\.\s", follow, maxsplit=1)[0]   # first sentence only
                 hits.append(Hit(section=section, offset=offsets[i], page=page_of(offsets[i], starts),
@@ -309,8 +354,9 @@ def extract_auditor_subsections(aud_text: str) -> tuple[dict[str, Any], str]:
         s = ln.strip()
         if not s or len(s) > 120:
             continue
-        cand = _NUMBERING.sub("", s)
-        headings_lower.append(cand.lower())
+        cand = _NUMBERING.sub("", re.sub(r"^[^\w(]+", "", s))          # "• Emphasis of Matter"
+        cand = _unsplit_ligatures(cand)
+        headings_lower.append(_heading_form(cand))
         for name, rx in _SUB_COMPILED:
             m = rx.match(cand)
             if m and _is_heading_rest(cand[m.end():]):
@@ -325,7 +371,7 @@ def extract_auditor_subsections(aud_text: str) -> tuple[dict[str, Any], str]:
         if name not in subs or len(body) > subs[name]["n_chars"]:
             subs[name] = {"heading": heading, "n_chars": len(body), "text": body}
 
-    low = aud_text.lower()
+    low = re.sub(r"\s+", " ", _unsplit_ligatures(aud_text.lower()))
     if any(re.fullmatch(r"disclaimer\s+of\s+opinion", h) for h in headings_lower) or \
             "we do not express an opinion" in low:
         opinion = "disclaimer"
@@ -335,9 +381,36 @@ def extract_auditor_subsections(aud_text: str) -> tuple[dict[str, Any], str]:
         opinion = "qualified"
     elif any(re.fullmatch(r"(?:unmodified\s+)?opinion", h) for h in headings_lower):
         opinion = "unmodified"
+    # No opinion heading could be read (bullets, headings run into the line before,
+    # OCR, the pre-2018 layout): the opinion paragraph's own wording decides.
+    elif re.search(r"do(?:es)? not give a true and fair view", low):
+        opinion = "adverse"
+    elif re.search(r"except for the (?:possible )?effects? of the matters?", low):
+        opinion = "qualified"
+    elif re.search(r"give[s]? a true and fair view", low):
+        opinion = "unmodified"
     else:
         opinion = "unknown"
     return subs, opinion
+
+
+def _unsplit_ligatures(text: str) -> str:
+    """PDF text splits the fi/fl ligatures: "Qualifi ed Opinion", "modifi ed"."""
+    return re.sub(r"(?<=[a-z])(fi|fl) (?=(?:ed|es|er|cation|cations|nancial|rm|ve|x|ne)\b)", r"\1", text)
+
+
+def _heading_form(line: str) -> str:
+    """A heading line reduced to its words: bullets and colons gone, a doubled heading
+    ("Opinion Opinion Opinion") once, and a heading run into the one before it
+    ("...Standalone Financial Statements Opinion") cut to its last part."""
+    h = _unsplit_ligatures(line.lower())
+    h = re.sub(r"[^a-z\s]", " ", h)
+    h = re.sub(r"\s+", " ", h).strip()
+    h = re.sub(r"\b(\w+)(?: \1\b)+", r"\1", h)                     # "opinion opinion opinion"
+    h = re.sub(r"\b(\w+ \w+)(?: \1\b)+", r"\1", h)                 # "basis for opinion basis for opinion"
+    m = re.search(r"(?:financial statements|report on the audit[a-z ]*?) ((?:qualified |adverse |unmodified )?opinion|"
+                  r"disclaimer of opinion)$", h)
+    return m.group(1) if m else h
 
 
 def segment_document(pages: list[dict[str, Any]], cfg: dict[str, Any]) -> dict[str, Any]:

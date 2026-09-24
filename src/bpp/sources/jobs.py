@@ -22,19 +22,48 @@ def bse_header(code: str) -> dict[str, Any]:
             "collect": "raw/listed/bse_company_header.jsonl", "key": str(code)}
 
 
-def bse_result_archive(code: str) -> dict[str, Any]:
+def _part(path: str, part: str | None) -> str:
+    """``raw/x/name.jsonl`` -> ``raw/x/name_<part>.jsonl`` (read back together by ``iter_jsonl``)."""
+    if not part:
+        return path
+    stem, ext = path.rsplit(".", 1)
+    return f"{stem}_{part}.{ext}"
+
+
+def bse_result_archive(code: str, part: str | None = None) -> dict[str, Any]:
     return {"url": f"{BSE_API}Result_Arch_ng/w?scrip_cd={code}", "kind": "collect",
-            "collect": "raw/xbrl/_listings/bse_result_archive.jsonl", "key": str(code)}
+            "collect": _part("raw/xbrl/_listings/bse_result_archive.jsonl", part), "key": str(code)}
 
 
-def bse_annual_reports(code: str) -> dict[str, Any]:
+def bse_annual_reports(code: str, part: str | None = None) -> dict[str, Any]:
     return {"url": f"{BSE_API}AnnualReport_New/w?scripcode={code}", "kind": "collect",
-            "collect": "raw/annual_reports/_listings/bse_annual_reports.jsonl", "key": str(code)}
+            "collect": _part("raw/annual_reports/_listings/bse_annual_reports.jsonl", part), "key": str(code)}
 
 
-def xbrl_file(firm_id: str, fy: int, url: str) -> dict[str, Any]:
-    return {"url": url, "kind": "collect", "collect": "raw/xbrl/results_standalone_annual.jsonl",
+def xbrl_file(firm_id: str, fy: int, url: str, part: str | None = None) -> dict[str, Any]:
+    return {"url": url, "kind": "collect", "collect": _part("raw/xbrl/results_standalone_annual.jsonl", part),
             "key": f"{firm_id}_FY{int(fy)}", "meta": {"firm_id": firm_id, "fy": int(fy)}}
+
+
+def write_jobs(out_dir: Path | str, name: str, items: Iterable[dict[str, Any]], note: str,
+               delay_s: float = 0.8, per_job: int = 1500) -> list[Path]:
+    """Split a long list into jobs ``<name>a``, ``<name>b``... of at most ``per_job`` items.
+
+    Items of a collect kind write to a part named after their job, so no single
+    file the laptop has to hand over grows past what one transfer can carry.
+    """
+    items = list(items)
+    paths = []
+    for k in range(0, len(items), per_job):
+        job = f"{name}_{chr(ord('a') + k // per_job)}"
+        chunk = []
+        for it in items[k:k + per_job]:
+            it = dict(it)
+            if it.get("kind") == "collect":
+                it["collect"] = _part(it["collect"], job)
+            chunk.append(it)
+        paths.append(write_job(out_dir, job, chunk, note, delay_s))
+    return paths
 
 
 def report_pdf(firm_id: str, fy: int, url: str) -> dict[str, Any]:

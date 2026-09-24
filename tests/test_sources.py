@@ -256,3 +256,18 @@ def test_under_gap_fill_the_report_still_wins(cfg):
     got = resolved.set_index("field")
     assert got.loc["total_assets", "source"] == SOURCE_PRIMARY and got.loc["total_assets", "value_cr"] == 110.0
     assert got.loc["revenue", "source"] == SOURCE_EXCHANGE_XBRL         # a gap is still filled
+
+
+def test_collect_parts_are_read_together_latest_wins(tmp_path):
+    import json
+    from bpp.sources.bse import iter_jsonl
+    from bpp.sources.jobs import write_jobs, bse_result_archive
+    base = tmp_path / "arch.jsonl"
+    base.write_text(json.dumps({"key": "1", "body": "old"}) + "\n" + json.dumps({"key": "2", "body": "b"}) + "\n")
+    (tmp_path / "arch_012_x_a.jsonl").write_text(json.dumps({"key": "1", "body": "new"}) + "\n")
+    got = {r["key"]: r["body"] for r in iter_jsonl(base)}
+    assert got == {"1": "new", "2": "b"}
+    paths = write_jobs(tmp_path / "jobs", "012_x", [bse_result_archive(str(c)) for c in range(5)], "n", per_job=2)
+    assert [p.stem for p in paths] == ["012_x_a", "012_x_b", "012_x_c"]
+    job = json.loads(paths[1].read_text())
+    assert job["items"][0]["collect"].endswith("bse_result_archive_012_x_b.jsonl")
