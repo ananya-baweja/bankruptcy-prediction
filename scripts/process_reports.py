@@ -41,8 +41,22 @@ def _extract_one(args: tuple[str, str, str, int, str, dict]) -> dict:
     return {"doc_id": doc_id, **{k: v for k, v in res.items() if k != "pages"}, "wall_s": round(time.time() - t0, 1)}
 
 
+def _write_summary(summ: Path, rows: list[dict]) -> None:
+    old = pd.read_csv(summ) if summ.exists() else pd.DataFrame()
+    new = pd.DataFrame(rows)
+    if len(old) and len(new):
+        old = old[~old["doc_id"].isin(new["doc_id"])]
+    pd.concat([old, new], ignore_index=True).to_csv(summ, index=False)
+
+
 def step_text(paths: Paths, cfg: dict, workers: int, force: bool) -> None:
     man = pd.read_csv(paths.documents, dtype=str)
+    # The cohort's reports first: OCR takes hours, and reports of firms that found
+    # no peer are only needed if they are matched later.
+    cohort = paths.processed / "cohort.csv"
+    if cohort.exists():
+        in_cohort = set(pd.read_csv(cohort, dtype=str)["firm_id"])
+        man = man.assign(_first=~man["firm_id"].isin(in_cohort)).sort_values("_first", kind="stable")
     todo = []
     for _, r in man.iterrows():
         out = paths.pages / f"{r['doc_id']}.json"
@@ -51,6 +65,7 @@ def step_text(paths: Paths, cfg: dict, workers: int, force: bool) -> None:
         todo.append((r["local_path"], str(out), r["firm_id"], int(r["fy"]), r["doc_id"], cfg))
     log.info("extracting text from %d PDFs with %d workers", len(todo), workers)
     paths.pages.mkdir(parents=True, exist_ok=True)
+    summ = paths.interim / "text_extraction_summary.csv"
     rows = []
     with ProcessPoolExecutor(max_workers=workers) as ex:
         futs = [ex.submit(_extract_one, a) for a in todo]
@@ -59,12 +74,9 @@ def step_text(paths: Paths, cfg: dict, workers: int, force: bool) -> None:
             rows.append(r)
             log.info("[%d/%d] %s %s", i, len(todo), r["doc_id"],
                      r.get("error") or f"{r['n_pages']} pages, {r['n_ocr_pages']} OCR, {r['wall_s']}s")
-    summ = paths.interim / "text_extraction_summary.csv"
-    old = pd.read_csv(summ) if summ.exists() else pd.DataFrame()
-    new = pd.DataFrame(rows)
-    if len(old) and len(new):
-        old = old[~old["doc_id"].isin(new["doc_id"])]
-    pd.concat([old, new], ignore_index=True).to_csv(summ, index=False)
+            if i % 10 == 0:            # a stopped run keeps the summary of what it finished
+                _write_summary(summ, rows)
+    _write_summary(summ, rows)
 
 
 def step_cincheck(paths: Paths, n_pages: int = 12) -> None:

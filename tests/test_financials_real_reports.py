@@ -391,6 +391,17 @@ def test_ocr_slips_in_figures():
     # a space before a thousands comma
     assert split_label_and_figures("(i) Long term borrowings 12 6 ,24,79,590 5,00,00,000") == (
         "(i) Long term borrowings", ["6,24,79,590", "5,00,00,000"])
+    # a scanned report's own text layer: spaces after a comma and around the decimal point
+    assert split_label_and_figures("(iii) Cash and Cash Equivalents 7 285.12 1, 255. 53 1, 172. 16", 3) == (
+        "(iii) Cash and Cash Equivalents", ["285.12", "1,255.53", "1,172.16"])
+    assert split_label_and_figures("(b) Intangible Assets 2 10.06 70 .68 131 . 65", 3)[1] == [
+        "10.06", "70.68", "131.65"]
+    assert split_label_and_figures("Total Non-Current Assets 60,605.79 64 ,832. 53 68 ,720. 31", 3)[1] == [
+        "60,605.79", "64,832.53", "68,720.31"]
+    # ... but a date's year and a list of notes are never joined to a figure
+    assert split_label_and_figures("Balance as at March 31, 2019 1,234.56 1,000.00")[1] == ["1,234.56", "1,000.00"]
+    assert split_label_and_figures("Trade receivables (Refer Notes 5, 6) 1,234.56 1,100.00")[1] == [
+        "1,234.56", "1,100.00"]
     # a formula reference is not a figure
     assert split_label_and_figures("3 Profit Before Exceptional Item and Tax (1-2) 9,58,44,849 7,96,23,379")[1] == [
         "9,58,44,849", "7,96,23,379"]

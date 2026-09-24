@@ -311,6 +311,11 @@ _FORMULA = re.compile(
     r"\(\s*(?:\d{1,2}|[IVXivx]{1,5}|[A-H])\s*[-+]\s*(?:\d{1,2}|[IVXivx]{1,5}|[A-H])"
     r"(?:\s*[-+]\s*(?:\d{1,2}|[IVXivx]{1,5}|[A-H]))*\s*\)")
 
+# stray OCR spaces inside one figure (find_cell_spans); each match's spaces are dropped
+_SPACE_BEFORE_COMMA = re.compile(r"(?<=\d) (?=,\d)")
+_SPACE_AFTER_COMMA = re.compile(r"(?<=\d,) (?=\d{2,3}(?![\d]))")
+_SPACED_DECIMAL = re.compile(r"(?<=\d)(?: \.|\. | \. )(?=\d{2}(?![\d.,]))")
+
 
 def find_cell_spans(line: str) -> list[tuple[str, str, int, int]]:
     """Every money-column cell, as ``(token, kind, start, end)``.
@@ -321,12 +326,18 @@ def find_cell_spans(line: str) -> list[tuple[str, str, int, int]]:
     """
     # A formula reference is not a cell: "Profit before tax (1-2)", "(III-IV)", "(5+6)"
     line = _FORMULA.sub(lambda m: " " * len(m.group(0)), line)
-    # OCR puts a space before a thousands comma ("6 ,24,79,590"); a space never
-    # precedes a comma in print, so closing it up cannot join two real cells.
-    # Positions are mapped back so they still index the original line.
-    kept = [i for i, ch in enumerate(line)
-            if not (ch == " " and 0 < i < len(line) - 2 and line[i - 1].isdigit()
-                    and line[i + 1] == "," and line[i + 2].isdigit())]
+    # OCR splits figures with stray spaces. Closed up here, positions mapped back
+    # so they still index the original line:
+    # * before a thousands comma ("6 ,24,79,590") - a space never precedes a comma in print;
+    # * after a thousands comma when a 2- or 3-digit group follows ("1, 255.53") - a
+    #   date's ", 2019" has four digits and a list of notes ("5, 6") one, so neither joins;
+    # * around a decimal point followed by exactly two digits ("70 .68", "131 . 65",
+    #   "215. 96") - the paise of a figure (seen on scanned reports' own text layer).
+    drop = {m.start() for m in _SPACE_BEFORE_COMMA.finditer(line)}
+    drop |= {m.start() for m in _SPACE_AFTER_COMMA.finditer(line)}
+    for m in _SPACED_DECIMAL.finditer(line):
+        drop.update(i for i in range(m.start(), m.end()) if line[i] == " ")
+    kept = [i for i in range(len(line)) if i not in drop]
     text = "".join(line[i] for i in kept)
     out: list[tuple[str, str, int, int]] = []
     for m in _CELL_TOKEN.finditer(text):

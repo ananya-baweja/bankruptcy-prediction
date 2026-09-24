@@ -172,9 +172,10 @@ def signal_check(frame: pd.DataFrame, features: list[str], source: str) -> pd.Da
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--data-dir", required=True, type=Path)
+    ap.add_argument("--name", default="pilot", help="output folder under interim/qa (pilot, full)")
     a = ap.parse_args()
     paths = Paths(a.data_dir)
-    out = paths.qa / "pilot"
+    out = paths.qa / a.name
     out.mkdir(parents=True, exist_ok=True)
 
     cohort = _read(paths.cohort)
@@ -197,7 +198,8 @@ def main() -> None:
                      signal_check(rat, RATIOS + ["altman_z_dprime"], "ratios")], ignore_index=True)
     sig.to_csv(out / "signal_check.csv", index=False)
 
-    L = ["# Pilot on real reports - what came out", ""]
+    title = "Pilot" if a.name == "pilot" else "Full cohort"
+    L = [f"# {title} on real reports - what came out", ""]
     if len(cohort):
         L.append(f"- Cohort: {cohort['pair_id'].nunique()} pairs, {len(cohort)} firms.")
     if len(text):
@@ -219,7 +221,7 @@ def main() -> None:
         L.append(f"- Report CIN check (insolvent firms): {cin['report_cin_check'].value_counts().to_dict()}.")
     if len(sig):
         const = sig[sig["constant"]]["feature"].tolist()
-        L.append(f"- Constant features in the pilot: {const or 'none'}.")
+        L.append(f"- Constant features: {const or 'none'}.")
     (out / "summary.md").write_text("\n".join(L) + "\n", encoding="utf-8")
     print("\n".join(L))
     if acc:
