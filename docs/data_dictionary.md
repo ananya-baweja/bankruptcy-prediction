@@ -44,6 +44,10 @@ when a key repeats, the last line wins. `logs/<job>.csv` records every request w
 | `xbrl/results_standalone_annual.jsonl` | the standalone annual results XBRL instances, keyed `<firm_id>_FY<fy>` |
 | `annual_reports/_listings/bse_annual_reports.jsonl` | BSE `AnnualReport_New` per scrip: PDF link and filing time per year |
 
+From the full-cohort run on, each job writes its own part file next to the base file
+(`<name>_<job>.jsonl`, e.g. `xbrl/results_standalone_annual_013_full_candidate_xbrl_a.jsonl`), so no file
+outgrows a hand-over; readers take the base file and every part together, the last line per key winning.
+
 ## Interim (`interim/`)
 
 | File | Key columns |
@@ -68,11 +72,16 @@ when a key repeats, the last line wins. `logs/<job>.csv` records every request w
 | `ibbi_listed_matches.csv` | as before, plus `cin`, `listing_evidence (cin_L / no_cin)`, `report_cin`, `report_cin_check` |
 | `distressed_eligibility.csv` | every matched insolvent firm: reference FY, BSE industry, reports before admission, XBRL size year, `eligible`, `ineligible_reason` |
 | `pilot_distressed.csv`, `pilot_peer_candidates.csv`, `pilot_pairs.csv`, `pilot_unmatched.csv` | the pilot sample, its possible peers, the chosen pairs, and firms left without a peer (with the reason) |
+| `full_distressed.csv` | every eligible insolvent firm for the full cohort (pilot firms included; `full-*` steps use the ones not already paired) |
+| `full_peer_candidates.csv` | `distressed_code, candidate_code, reference_fy, match_quality`: every possible peer (same BSE sub-group, not in the CIRP match list, not a pilot peer) |
+| `full_pairs.csv` | the new pairs: `distressed_code, peer_code, reference_fy, size_fy, distressed_assets, peer_assets, asset_ratio, match_quality, n_candidates, admission_date` |
+| `full_unmatched.csv` | insolvent firms left without a peer, with the reason |
 | `xbrl_financials_exchange.csv` | `firm_id, fy, field, value_cr, source_url, note` parsed from the exchange XBRL filings (Rs crore) - Phase 3 reads it first when `xbrl_priority: first` |
 | `report_cin_check.csv` | per insolvent firm: the IBBI CIN, the CIN printed in its reports, and `confirmed / confirmed_reg_no / mismatch / cin_not_found` |
 | `text_extraction_summary.csv` | per report: pages, OCR pages, backend, seconds |
 | `qa/leakage_review.csv` | the reports Phase 2 flagged (`needs_leakage_review`), read: `finding` (own_petition / company_as_creditor / statutory_disclosure / guaranteed_party), `evidence` (page + gist), `recommendation` |
 | `qa/pilot/` | `scripts/pilot_report.py`: `summary.md`, `pdf_vs_xbrl_by_field.csv`, `pdf_vs_xbrl_mismatches.csv` (with `disagreement`), `unrecoverable_by_class.csv`, `coverage_by_class.csv`, `signal_check.csv` |
+| `qa/full/` | the same tables for the full cohort (`pilot_report.py --name full`) |
 
 ## Processed (`processed/`)
 
