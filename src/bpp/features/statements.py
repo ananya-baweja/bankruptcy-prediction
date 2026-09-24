@@ -138,7 +138,8 @@ _TAIL_DATE = re.compile(
     rf"|\d{{1,2}}\s*[./-]\s*\d{{1,2}}\s*[./-]\s*\d{{2,4}})", re.I)
 _TAIL_REST = re.compile(
     r"^[\s,.:;()\[\]\-–|`₹*]*(?:(?:all|amounts?|figures?|fig|rs|rupees|inr|in|lakhs?|lacs?|crores?|millions?"
-    r"|thousands?|unless|otherwise|stated|except|per|share|data|and|standalone|audited)\b[\s,.:;()\[\]\-–|`₹*]*)*$",
+    r"|thousands?|hundreds?|unless|otherwise|stated|except|per|share|data|and|standalone|audited)\b"
+    r"[\s,.:;()\[\]\-–|`₹*]*)*$",
     re.I)
 
 
@@ -274,12 +275,7 @@ def locate_statements(pages: list[dict[str, Any]], cfg: dict[str, Any],
             loc.flags.append("few_money_lines_on_page")
 
         head_text = by_page[start_page]["text"][:1500]
-        loc.unit, loc.unit_confidence = detect_unit(head_text, fcfg["default_unit"])
-        loc.unit_source = _unit_source_line(head_text)
-        if loc.unit_confidence < 0.5:
-            loc.flags.append("unit_not_stated_assumed_" + loc.unit)
-        elif loc.unit_confidence < 0.9:
-            loc.flags.append("unit_ambiguous_read_as_" + loc.unit)
+        _read_unit(loc, by_page[start_page]["text"], fcfg["default_unit"])
         loc.period_fys, loc.period_confidence = detect_period_columns(head_text, report_fy)
         if loc.period_confidence < 0.5:
             loc.flags.append("period_columns_assumed")
@@ -292,12 +288,171 @@ def locate_statements(pages: list[dict[str, Any]], cfg: dict[str, Any],
         loc.ocr_pages = sum(1 for p in pages
                             if start_page <= p["page"] <= end_page and p.get("method") == "ocr")
         out[name] = loc
+
+    _units_from_rest_of_report(out, pages)
+    for loc in out.values():
+        if loc.unit_confidence < 0.5:
+            loc.flags.append("unit_not_stated_assumed_" + loc.unit)
+        elif loc.unit_confidence < 0.9:
+            loc.flags.append("unit_ambiguous_read_as_" + loc.unit)
     return out
+
+
+def _read_unit(loc: StatementLocation, text: str, default: str) -> None:
+    """The unit printed on the statement's own first page, wherever the text layer put it."""
+    head_text = text[:1500]
+    loc.unit, loc.unit_confidence = detect_unit(head_text, default)
+    loc.unit_source = _unit_source_line(head_text)
+    # a bare "Rs. Rs." column header yields to a scale caption printed elsewhere on the page
+    header_only = loc.unit == "rupee" and loc.unit_confidence < 0.9
+    if loc.unit_confidence >= 0.5 and not header_only:
+        return
+    # The caption is printed top right, but many PDFs' text layers put it after the
+    # signature block ("(Rs in Lakh)" as the page's last line) or inside the heading line
+    # ("Balance sheet as at 31 March 2019 (` in Lakhs)"); read a caption anywhere on the
+    # page before assuming the default (lakh statements were read as crore, 100x too
+    # large, on real reports)
+    caption = _caption_lines(text)
+    if caption:
+        unit, conf = detect_unit(caption, default)
+        if conf >= 0.5 and not (header_only and unit == "rupee"):
+            loc.unit, loc.unit_confidence = unit, min(conf, 0.9)
+            loc.unit_source = _unit_source_line(caption) or caption.split("\n")[0][:120]
+            loc.flags.append("unit_caption_found_below_statement")
+            return
+    if header_only:
+        return
+    decoded = _decoded_caption_unit(text)
+    if decoded:
+        loc.unit, loc.unit_confidence, loc.unit_source = decoded[0], 0.8, decoded[1]
+        loc.flags.append("unit_caption_decoded_from_shifted_font")
+
+
+def _units_from_rest_of_report(out: dict[str, StatementLocation], pages: list[dict[str, Any]]) -> None:
+    """A statement with no caption of its own takes its unit from the rest of the report.
+
+    A report prints its statements in one unit, but often captions only some of them
+    (the profit and loss says "(Amount in Lakhs)", the balance sheet nothing). Failing
+    that, the accounting-policy note says it ("presented in lakhs of Indian rupees",
+    "rounded to the nearest lakhs"). Both were found on real reports read as crore.
+    """
+    captioned = [loc for loc in out.values() if loc.unit_confidence >= 0.5]
+    for loc in out.values():
+        if loc.unit_confidence >= 0.5:
+            continue
+        same = [c for c in captioned if c.scope == loc.scope]
+        if same:
+            src = min(same, key=lambda c: abs(c.start_page - loc.start_page))
+            loc.unit, loc.unit_confidence = src.unit, min(src.unit_confidence, 0.75)
+            loc.unit_source = src.unit_source
+            loc.flags.append(f"unit_from_{src.statement}")
+            continue
+        found = report_unit(pages, loc.start_page)
+        if found:
+            loc.unit, loc.unit_confidence, loc.unit_source, how = found
+            loc.flags.append(how)
+
+
+_SCALE_WORD = r"(?:crores?|lakhs?|lacs?|hundreds?|millions?|thousands?|billions?)"
+
+#: a line that is only a unit caption: "(Rs in Lakh)", "(All amounts are in Rs. Lakhs, unless
+#: otherwise stated)", "(Amount in INR lakhs)", "(Rupees in crores)"
+_CAPTION_LINE = re.compile(r"^[^\n\d]{0,70}?\b" + _SCALE_WORD + r"\b[^\n\d]{0,80}\)?\s*$", re.I)
+#: a bracketed caption inside a longer line: "Balance sheet as at 31 March 2019 ( ` in Lakhs)"
+_CAPTION_GROUP = re.compile(r"\([^()\d\n]{0,60}?\b" + _SCALE_WORD + r"\b[^()\d\n]{0,90}\)?", re.I)
+#: a bracketed caption that names the currency only: "(Amount in `)", "(Amount in Rs.)", "(In Rs.)"
+_RUPEE_CAPTION = re.compile(
+    r"\(\s*(?:(?:all\s+)?(?:amounts?|figures?)\s+(?:are\s+)?)?in\s+(?:rs\.?|₹|`|inr|rupees|indian\s+rupees)\s*\)",
+    re.I)
+
+
+def _caption_lines(text: str) -> str:
+    out: list[str] = []
+    for line in text.split("\n"):
+        line = line.strip()
+        if len(line) <= 130 and _CAPTION_LINE.match(line):
+            out.append(line)
+            continue
+        out += [m.group(0) for m in _CAPTION_GROUP.finditer(line)]
+        out += [m.group(0) for m in _RUPEE_CAPTION.finditer(line)]
+    return "\n".join(out)
+
+
+_UNIT_NAMES = {"lakh": "lakh", "lakhs": "lakh", "lac": "lakh", "lacs": "lakh", "crore": "crore",
+               "crores": "crore", "thousand": "thousand", "thousands": "thousand", "hundred": "hundred",
+               "hundreds": "hundred", "million": "million", "millions": "million", "rupee": "rupee",
+               "rupees": "rupee"}
+
+#: the scale after "in" once a shifted caption is decoded: "inLakhs", "inINRLakhs"
+_SHIFTED_UNIT = re.compile(r"in\s*(?:inr|rs\.?|₹|`)?\s*(lakhs?|lacs?|crores?|thousands?|millions?|hundreds?)", re.I)
+
+
+def _decoded_caption_unit(text: str) -> tuple[str, str] | None:
+    """A caption set in a font whose text layer is shifted 29 code points down.
+
+    Subset fonts without a Unicode map come out as glyph numbers: "(`LQ/DNKV" is
+    "(`in Lakhs" and "$PRXQWLQ,15/DNKV" is "Amount in INR Lakhs" (two real reports).
+    Only short lines with no lower-case letters are tried, and only a decoded
+    "in <scale>" counts.
+    """
+    for line in text.split("\n"):
+        line = line.strip()
+        if not 4 <= len(line) <= 40 or re.search(r"[a-z]", line):
+            continue
+        decoded = "".join(chr(ord(c) + 29) if "!" <= c <= "]" else c for c in line)
+        m = _SHIFTED_UNIT.search(decoded)
+        if m:
+            return _UNIT_NAMES[m.group(1).lower()], f"{line} (decoded: {decoded})"
+    return None
+
+
+#: the accounting-policy note's statement of the unit
+_POLICY_UNIT = re.compile(
+    r"\brounded\s+(?:off\s+)?(?:to|in)\s+(?:the\s+)?(?:nearest\s+)?(?:of\s+)?(?:the\s+)?"
+    r"(?:(?:₹|rs\.?|inr|indian\s+rupees?|rupees?)\s+)?(?:in\s+)?(?P<u1>lakhs?|lacs?|crores?|thousands?|hundreds?"
+    r"|millions?|rupees?)\b"
+    r"|\b(?:presented|expressed|stated|reported)\s+in\s+(?:(?:₹|rs\.?|inr|indian\s+rupees?|rupees?)\s+(?:in\s+)?)?"
+    r"(?P<u2>lakhs?|lacs?|crores?|thousands?|millions?)\b", re.I)
+#: a table caption in the notes: "Rs. In Lakhs", "(₹ in crore)", "(Amount in Lakhs)"
+_NOTE_CAPTION = re.compile(r"(?:₹|`|\brs\b\.?|\binr\b|\brupees\b|\bamounts?\b)\s*(?:in\s+)?"
+                           r"\b(lakhs?|lacs?|crores?|thousands?|millions?)\b", re.I)
+
+
+def report_unit(pages: list[dict[str, Any]], start_page: int, ahead: int = 60,
+                min_captions: int = 3) -> tuple[str, float, str, str] | None:
+    """The unit the notes after a statement use: ``(unit, confidence, source, flag)`` or None.
+
+    The accounting-policy sentence decides when there is one; otherwise the notes'
+    own table captions, when at least ``min_captions`` of them agree (80%).
+    """
+    policy: dict[str, int] = {}
+    first: dict[str, str] = {}
+    notes: dict[str, int] = {}
+    for page in pages:
+        if not start_page - 1 <= page["page"] <= start_page + ahead:
+            continue
+        text = re.sub(r"\s+", " ", page["text"])
+        for m in _POLICY_UNIT.finditer(text):
+            unit = _UNIT_NAMES[(m.group("u1") or m.group("u2")).lower()]
+            policy[unit] = policy.get(unit, 0) + 1
+            first.setdefault(unit, f"p{page['page']}: {m.group(0)}")
+        for m in _NOTE_CAPTION.finditer(text):
+            unit = _UNIT_NAMES[m.group(1).lower()]
+            notes[unit] = notes.get(unit, 0) + 1
+    if policy:
+        unit, n = max(policy.items(), key=lambda kv: kv[1])
+        if n >= 2 / 3 * sum(policy.values()):
+            return unit, 0.75, first[unit][:120], "unit_from_accounting_policy_note"
+    if notes:
+        unit, n = max(notes.items(), key=lambda kv: kv[1])
+        if n >= min_captions and n >= 0.8 * sum(notes.values()):
+            return unit, 0.7, f"{n} note captions in {unit}", "unit_from_note_captions"
+    return None
 
 
 def _unit_source_line(text: str) -> str:
     for line in text.split("\n"):
-        if re.search(r"crore|lakh|lac|million|thousand|'000|rupees", line, re.I):
+        if re.search(r"crore|lakh|lac|million|thousand|hundred|'000|rupees", line, re.I):
             return re.sub(r"\s+", " ", line).strip()[:120]
     return ""
 

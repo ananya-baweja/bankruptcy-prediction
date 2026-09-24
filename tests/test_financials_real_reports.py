@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 
 from bpp.features.financials import extract_document
-from bpp.features.numbers import detect_unit, infer_unit_from_magnitude, rupee_column_header
+from bpp.features.numbers import detect_unit, infer_unit_from_magnitude, parse_number, rupee_column_header
 from bpp.features.statements import FieldHit, best_hits, locate_statements
 
 
@@ -591,3 +591,192 @@ def test_missing_totals_are_filled_from_their_definition_only():
     r = out.iloc[1]
     assert r.current_assets == 45.0               # a figure that was read is never replaced
     assert r.current_liabilities == 35.0 and r.derived_fields == "current_liabilities"
+
+
+# --------------------------------------------------------------------------- units on the full cohort (2026-09-25)
+# The first full-cohort run read 66 company-years a power of ten off the filings. Each
+# test below is one caption layout (or its absence) from those reports.
+LAKH_ROWS = [
+    "a) Property, Plant and Equipment 5 1,711.74 2,074.71",
+    "Total Non-Current Assets 4,209.47 4,722.25",
+    "a) Inventories 8 88.66 182.09",
+    "iii) Cash and cash equivalents 1.99 3.36",
+    "Total Current Assets 3,635.07 4,199.03",
+    "Total Assets 7,844.54 8,921.28",
+    "a) Equity Share Capital 11 2,165.12 2,165.12",
+    "b) Other Equity 12 (5,607.03) (4,175.76)",
+    "Total Equity (3,441.91) (2,010.64)",
+    "Total Equity and Liabilities 7,844.54 8,921.28",
+]
+SIGNATURES = ["As per our report of even date", "For M.M. Parikh & Co", "Chartered Accountants",
+              "Place : Hinganghat", "Date : 30 May 2019"]
+
+
+def _bs_unit(pages, cfg, fy=2020):
+    hits, report = extract_document({"doc_id": "BSE1_FY2020", "fy": fy, "pages": pages}, cfg)
+    got = {(h.field, h.fy): h.value for h in best_hits(hits).values()}
+    return got, report["statements"]["balance_sheet"]
+
+
+@pytest.mark.parametrize("caption_line", [
+    "st Balance sheet as at 31 March 2020 ( ` in Lakhs)",          # the heading line, with a date in it
+    "Balance Sheet as at March 31, 2020 (Amount in C lakh)",       # ₹ mis-encoded as "C"
+    "(All amount in lacs of Indian Rupees, except share data and as stated otherwise) "
+    "(All amount in lacs of Indian Rupees, except share data and as stated otherwise",   # a two-page spread
+])
+def test_a_caption_anywhere_on_the_page_sets_the_unit(cfg, caption_line):
+    page = _bs_page(69, None, LAKH_ROWS + SIGNATURES + [caption_line])
+    got, bs = _bs_unit([page], cfg)
+    assert bs["unit"] == "lakh"
+    assert got[("total_assets", 2020)] == pytest.approx(78.4454)
+
+
+def test_hundreds_are_a_unit_but_one_hundred_is_not():
+    assert detect_unit("(` in Hundreds)") == ("hundred", 0.95)
+    assert detect_unit("(Rs.in Hundred)")[0] == "hundred"
+    assert detect_unit("paid one hundred shares to the trust")[1] < 0.5
+    assert parse_number("3,76,867.22", "hundred").value == pytest.approx(3.7686722)
+
+
+def test_amount_in_the_rupee_font_glyph_is_rupees():
+    assert detect_unit("(Amount in `)\nAs at As at") == ("rupee", 0.95)
+
+
+@pytest.mark.parametrize("garbled", ["(`LQ/DNKV", "$PRXQWLQ,15/DNKV"])
+def test_a_caption_in_a_shifted_font_is_decoded(cfg, garbled):
+    page = _bs_page(87, None, LAKH_ROWS + SIGNATURES + [garbled])
+    got, bs = _bs_unit([page], cfg)
+    assert bs["unit"] == "lakh" and "unit_caption_decoded_from_shifted_font" in bs["flags"]
+    assert got[("total_assets", 2020)] == pytest.approx(78.4454)
+
+
+def test_an_uncaptioned_balance_sheet_takes_the_unit_of_the_profit_and_loss(cfg):
+    bs = _bs_page(59, None, LAKH_ROWS + SIGNATURES)
+    pl = {"page": 60, "method": "text", "text": "\n".join(
+        ["Statement of Profit and Loss for the year ended 31st March 2020", "(Amount in Lakhs)",
+         "Particulars Note 2019-20 2018-19"] + [f"Line {i} {200 + i}.00 {190 + i}.00" for i in range(8)])}
+    got, info = _bs_unit([bs, pl], cfg)
+    assert info["unit"] == "lakh" and "unit_from_profit_and_loss" in info["flags"]
+    assert got[("total_assets", 2020)] == pytest.approx(78.4454)
+
+
+@pytest.mark.parametrize("policy,unit,total", [
+    ("These standalone financial statements are presented in lakhs of Indian rupees which is also the "
+     "Company's functional currency", "lakh", 78.4454),
+    ("The financial statements are presented in Indian Rupee and all values are rounded to the nearest "
+     "lakhs, except when otherwise stated.", "lakh", 78.4454),
+])
+def test_the_accounting_policy_note_states_the_unit(cfg, policy, unit, total):
+    bs = _bs_page(45, None, LAKH_ROWS + SIGNATURES)
+    note = {"page": 47, "method": "text", "text": "Notes to the financial statements\n1. Basis of preparation\n" + policy}
+    got, info = _bs_unit([bs, note], cfg)
+    assert info["unit"] == unit and "unit_from_accounting_policy_note" in info["flags"]
+    assert got[("total_assets", 2020)] == pytest.approx(total)
+
+
+def test_rupees_and_paise_without_a_caption_are_rupees(cfg):
+    rows = ["a) Property, Plant and Equipment 3 7889733.73 8666430.73", "b) Capital Work in Progress 0.00 0.00",
+            "Total Non-Current Assets 17889733.73 18666430.73", "a) Inventories 4 2345678.12 3456789.45",
+            "Total Current Assets 12345678.91 13456789.02", "Total Assets 30235412.64 32123219.75",
+            "a) Equity Share Capital 10A 184124400.00 184124400.00",
+            "b) Other Equity 10B -249647239.11 -245720221.41"]
+    got, info = _bs_unit([_bs_page(70, None, rows)], cfg)
+    assert info["unit"] == "rupee" and got[("total_assets", 2020)] == pytest.approx(3.023541264)
+
+
+def test_a_lakh_caption_over_whole_rupee_figures_is_overruled(cfg):
+    rows = ["(a) Property, plant and equipment 3 13,16,32,774.00 14,09,00,864.00",
+            "(b) Capital work-in-progress 5,59,19,487.00 5,59,19,487.00",
+            "Total non current assets 24,14,44,320.00 23,99,05,581.00",
+            "(a) Inventories 7 3,88,39,172.00 3,72,61,910.00",
+            "Total current assets 9,95,17,312.00 9,83,93,145.00",
+            "Total Assets 34,09,61,632.00 33,82,98,726.00",
+            "(a) Equity Share capital 11 12,00,00,000.00 12,00,00,000.00"]
+    got, info = _bs_unit([_bs_page(59, "(All amounts in lacs unless otherwise stated)", rows)], cfg)
+    assert info["unit"] == "rupee" and "unit_caption_contradicted_by_magnitude" in info["flags"]
+    assert got[("total_assets", 2020)] == pytest.approx(34.0961632)
+
+
+def test_a_rupees_header_over_lakh_sized_figures_defers_to_the_notes(cfg):
+    bs = _bs_page(82, "Rs. Rs.", LAKH_ROWS + ["M. No. : 159938"])
+    note = {"page": 93, "method": "text",
+            "text": "Note 11 Share capital\nEquity Share of Rs. 1 each issued, subscribed and fully paid No. Rs. In Lakhs"}
+    got, info = _bs_unit([bs, note], cfg)
+    assert info["unit"] == "lakh" and "unit_rupee_header_implausible" in info["flags"]
+    assert got[("total_assets", 2020)] == pytest.approx(78.4454)
+
+
+def test_two_slipped_filings_in_a_row_do_not_outvote_the_report():
+    from bpp.features.financials import SOURCE_COMPARATIVE, xbrl_unit_checks
+    figs = pd.DataFrame([
+        {"firm_id": "BSE7", "fy": 2023, "field": "total_assets", "value_cr": 1177.99, "source": SOURCE_PRIMARY,
+         "source_doc_id": "BSE7_FY2023", "unit_confidence": 0.95},
+        {"firm_id": "BSE7", "fy": 2022, "field": "total_assets", "value_cr": 1193.89, "source": SOURCE_COMPARATIVE,
+         "source_doc_id": "BSE7_FY2023", "unit_confidence": 0.95},
+    ])
+    ex = pd.DataFrame([("BSE7", 2021, "total_assets", 946.03), ("BSE7", 2022, "total_assets", 11.9389),
+                       ("BSE7", 2023, "total_assets", 11.7799), ("BSE7", 2024, "total_assets", 1352.15)],
+                      columns=["firm_id", "fy", "field", "value_cr"])
+    checks = xbrl_unit_checks(figs, ex)
+    assert checks[("BSE7", 2023)] == "xbrl_unit_suspect"
+    assert checks[("BSE7", 2022)] == "xbrl_unit_suspect"     # a year with only next year's comparative
+
+
+def test_a_report_read_at_the_wrong_scale_supplies_neither_column(cfg):
+    from bpp.features.financials import SOURCE_COMPARATIVE
+    cfg = {**cfg, "financials": {**cfg["financials"], "xbrl_priority": "first"}}
+    row = dict(statement="balance_sheet", statement_scope="standalone", label="x", match_how="pattern",
+               match_score=1.0, unit="crore", unit_confidence=0.2, parse_confidence=1.0, parse_flags="",
+               ocr_pages=0, page=50)
+    figs = pd.DataFrame([
+        {**row, "firm_id": "BSE6", "fy": 2021, "field": "total_assets", "value_cr": 4664.72,
+         "source": SOURCE_PRIMARY, "source_doc_id": "BSE6_FY2021", "printed": 4664.72},
+        {**row, "firm_id": "BSE6", "fy": 2021, "field": "inventories", "value_cr": 800.0,
+         "source": SOURCE_PRIMARY, "source_doc_id": "BSE6_FY2021", "printed": 800.0},
+        # FY2020 has no report of its own: only the FY2021 report's prior-year column
+        {**row, "firm_id": "BSE6", "fy": 2020, "field": "inventories", "value_cr": 700.0,
+         "source": SOURCE_COMPARATIVE, "source_doc_id": "BSE6_FY2021", "printed": 700.0},
+    ])
+    ex = pd.DataFrame([("BSE6", 2021, "total_assets", 46.6472), ("BSE6", 2022, "total_assets", 50.1)],
+                      columns=["firm_id", "fy", "field", "value_cr"])
+    resolved, _ = resolve_figures(figs, pd.DataFrame(), cfg, ex)
+    keys = set(zip(resolved["fy"], resolved["field"]))
+    assert (2021, "inventories") not in keys and (2020, "inventories") not in keys
+    assert resolved.set_index(["fy", "field"]).loc[(2021, "total_assets"), "value_cr"] == pytest.approx(46.6472)
+
+
+def test_a_currency_only_caption_below_the_sheet_is_rupees(cfg):
+    rows = ["(a) Share Capital 3 50,000,000 50,000,000", "(b) Reserves and Surplus 4 21,456,789 19,876,543",
+            "Total Equity 71,456,789 69,876,543", "(a) Long-Term Borrowings 5 8,765,432 9,876,543",
+            "Total Assets 89,014,180 87,654,321", "(a) Inventories 6 12,345,678 11,234,567"]
+    page = _bs_page(41, None, rows + ["Place: Ahmedabad", "(In Rs.)"])
+    cash_flow = {"page": 45, "method": "text", "text": "\n".join(
+        ["Cash Flow Statement for the year ended 31st March 2020", "(In Lacs)", "Particulars 2019-20 2018-19"]
+        + [f"Line {i} {20 + i}.00 {19 + i}.00" for i in range(8)])}
+    got, info = _bs_unit([page, cash_flow], cfg)
+    assert info["unit"] == "rupee" and got[("total_assets", 2020)] == pytest.approx(8.901418)
+
+
+def test_a_unit_borrowed_from_another_statement_yields_to_rupee_magnitudes(cfg):
+    # the balance sheet has no caption, the cash flow is in lakhs, the figures are rupees
+    cash_flow = {"page": 45, "method": "text", "text": "\n".join(
+        ["Cash Flow Statement for the year ended 31st March 2020", "(In Lacs)", "Particulars 2019-20 2018-19"]
+        + [f"Line {i} {20 + i}.00 {19 + i}.00" for i in range(8)])}
+    got, info = _bs_unit([_bs_page(63, None, RUPEE_ROWS), cash_flow], cfg)
+    assert info["unit"] == "rupee" and "unit_inferred_rupee_from_magnitude" in info["flags"]
+    assert got[("total_assets", 2020)] == pytest.approx(78.4454285)
+
+
+def test_unit_checks_see_filings_outside_the_sample_years(cfg):
+    cfg = {**cfg, "financials": {**cfg["financials"], "xbrl_priority": "first"}}
+    figs = _pdf(1177.99, 0.95)          # FY2019 report in crore: right; FY2018-19 filings 100x too small
+    ex = pd.DataFrame([("BSE1", 2018, "total_assets", 11.94), ("BSE1", 2019, "total_assets", 11.7799)],
+                      columns=["firm_id", "fy", "field", "value_cr"])
+    evidence = pd.concat([ex, pd.DataFrame([("BSE1", 2020, "total_assets", 1352.15)], columns=ex.columns)])
+    resolved, _ = resolve_figures(figs, pd.DataFrame(), cfg, ex)
+    got = resolved.set_index(["fy", "field"])
+    assert got.loc[(2019, "total_assets"), "unit_check"] == "pdf_unit_suspect"   # the two slipped filings agree
+    resolved, _ = resolve_figures(figs, pd.DataFrame(), cfg, ex, evidence=evidence)
+    got = resolved.set_index(["fy", "field"])
+    assert got.loc[(2019, "total_assets"), "unit_check"] == "xbrl_unit_suspect"
+    assert got.loc[(2019, "total_assets"), "value_cr"] == pytest.approx(1177.99)

@@ -77,7 +77,7 @@ outgrows a hand-over; readers take the base file and every part together, the la
 | `full_pairs.csv` | the new pairs: `distressed_code, peer_code, reference_fy, size_fy, distressed_assets, peer_assets, asset_ratio, match_quality, n_candidates, admission_date` |
 | `full_unmatched.csv` | insolvent firms left without a peer, with the reason |
 | `xbrl_financials_exchange.csv` | `firm_id, fy, field, value_cr, source_url, note` parsed from the exchange XBRL filings (Rs crore) - Phase 3 reads it first when `xbrl_priority: first` |
-| `report_cin_check.csv` | per insolvent firm: the IBBI CIN, the CIN printed in its reports, and `confirmed / confirmed_reg_no / mismatch / cin_not_found` |
+| `report_cin_check.csv` | per insolvent firm: the IBBI CIN, the CIN printed in its reports (whole report read; OCR's O-for-0 undone), and `confirmed / confirmed_reg_no` (listing status or type changed) `/ confirmed_state_changed` (Andhra Pradesh to Telangana) `/ mismatch` (the CIN printed most often is given) `/ cin_not_found` |
 | `text_extraction_summary.csv` | per report: pages, OCR pages, backend, seconds |
 | `qa/leakage_review.csv` | the reports Phase 2 flagged (`needs_leakage_review`), read: `finding` (own_petition / company_as_creditor / statutory_disclosure / guaranteed_party), `evidence` (page + gist), `recommendation` |
 | `qa/pilot/` | `scripts/pilot_report.py`: `summary.md`, `pdf_vs_xbrl_by_field.csv`, `pdf_vs_xbrl_mismatches.csv` (with `disagreement`), `unrecoverable_by_class.csv`, `coverage_by_class.csv`, `signal_check.csv` |
@@ -111,7 +111,8 @@ source_doc_id, page, statement, statement_scope, label, match_how, match_score, 
 unit_confidence, printed, parse_confidence, parse_flags, ocr_pages, restated, restatement_diff,
 has_comparative, validation_flags, confidence`
 
-`value_cr` is ₹ crore; `printed` is the figure as the report showed it, in `unit`. `restated` means
+`value_cr` is ₹ crore; `printed` is the figure as the report showed it, in `unit` (`crore`, `lakh`,
+`million`, `billion`, `thousand`, `hundred` or `rupee`). `restated` means
 the next year's comparative disagreed with the figure as first published — the first-published one
 is kept either way.
 
@@ -123,7 +124,7 @@ beside it:
 | --- | --- |
 | `pdf_value_cr, pdf_source, pdf_source_doc_id, pdf_page` | what the annual report gave for the same field, and where |
 | `xbrl_pdf_diff` | relative gap between the two (0 = identical); the PDF reader's accuracy on real reports |
-| `unit_check` | per company-year: blank; `xbrl_unit_suspect` (the XBRL filing is a power of ten off - not used for that year); `pdf_unit_suspect` (the report was read at the wrong scale - its own-year figures are not used); `xbrl_stale_copy_pl` (the filing repeats last year's profit and loss - its flow figures are not used) |
+| `unit_check` | per company-year: blank; `xbrl_unit_suspect` (the XBRL filing is a power of ten off - not used for that year); `pdf_unit_suspect` (the report was read at the wrong scale - none of its figures is used, in either column; next year's report's prior-year column stands in where it was read right); `xbrl_stale_copy_pl` (the filing repeats last year's profit and loss - its flow figures are not used) |
 | `xbrl_value_cr, arbitration` | set when the balance-sheet identities chose the report over the filing: the filing's value, and e.g. `report_value_balances_1_of_1_xbrl_0` |
 
 `match_how` says how a figure was read: `pattern` / `fuzzy` (a printed label), `subtotal` (an unlabelled or bare `Total` line closing its section and equal to its rows), `bare_total` (a side's closing `Total`), `heading_total` (a section heading printed with its total), `section_sum` (rows added up where the report prints no total; kept only when both sides balance to rounding), `identity_arbitration`, `xbrl`.
