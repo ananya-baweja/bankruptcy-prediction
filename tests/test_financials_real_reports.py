@@ -780,3 +780,78 @@ def test_unit_checks_see_filings_outside_the_sample_years(cfg):
     got = resolved.set_index(["fy", "field"])
     assert got.loc[(2019, "total_assets"), "unit_check"] == "xbrl_unit_suspect"
     assert got.loc[(2019, "total_assets"), "value_cr"] == pytest.approx(1177.99)
+
+
+def test_an_ind_as_transition_balance_sheet_reads_its_first_two_columns(cfg):
+    lines = ["Balance Sheet as at 31st March, 2018", "(` in Lakh)", "Particulars Note", "No.",
+             "As at", "31st March, 2018", "As at", "31st March, 2017", "As at", "1st April, 2016",
+             "ASSETS", "1. Non-Current Assets",
+             "Property, Plant and Equipment 3 22.89 31.69 -",
+             "Total Non-Current Assets 12,694.16 178.88 -",
+             "Cash and Cash Equivalents 9 459.16 78.87 0.06",
+             "Total Current Assets 22,098.56 383.07 0.06",
+             "Total Assets 34,792.72 561.95 0.06",
+             "Equity Share Capital 14 1,231.66 5.00 1.00",
+             "Total Equity 7,018.15 (2,003.68) (1.19)",
+             "Total Non-Current Liabilities 604.22 673.69 1.08",
+             "Total Current Liabilities 27,170.33 1,891.91 0.17",
+             "Total Equity and Liabilities 34,792.72 561.95 0.06"]
+    page = {"page": 67, "method": "text", "text": "\n".join(lines)}
+    hits, report = extract_document({"doc_id": "BSE1_FY2018", "fy": 2018, "pages": [page]}, cfg)
+    got = {(h.field, h.fy): h.value for h in best_hits(hits).values()}
+    assert got[("total_assets", 2018)] == pytest.approx(347.9272)
+    assert got[("total_assets", 2017)] == pytest.approx(5.6195)
+    assert not any(fy < 2017 for _, fy in got)
+    assert "opening_balance_sheet_column_skipped" in report["statements"]["balance_sheet"]["flags"]
+
+
+def test_a_transition_sentence_does_not_make_a_third_column(cfg):
+    rows = ["The Company has adopted Ind AS with effect from 1st April, 2016",
+            "Inventories 8 88.66 182.09", "Total Current Assets 3,635.07 4,199.03",
+            "Total Assets 7,844.54 8,921.28", "Total Equity (3,441.91) (2,010.64)",
+            "Trade Receivables 9 1,211.00 1,300.00", "Cash and cash equivalents 10 1.99 3.36",
+            "Total Equity and Liabilities 7,844.54 8,921.28"]
+    got, info = _bs_unit([_bs_page(40, "(Rs. in lakhs)", rows, heading="Balance Sheet as at 31st March, 2018")],
+                         cfg, fy=2018)
+    assert "opening_balance_sheet_column_skipped" not in info["flags"]
+    assert got[("inventories", 2018)] == pytest.approx(0.8866)
+
+
+def test_a_wrapped_balance_sheet_line_in_the_directors_report_is_not_the_statement(cfg):
+    directors = {"page": 7, "method": "text", "text": "\n".join(
+        ["DIRECTORS' REPORT", "FINANCIAL RESULTS (Rs. In lakhs)", "Standalone Consolidated", "2016-17 2015-16 2016-17"]
+        + [f"Item {i} {2300 + i} {3300 + i} {2310 + i}" for i in range(30)]
+        + ["- Balance carried forward to 5782 4825 5784", "Balance Sheet", "Total 6175 6236 6177"])}
+    bs = {"page": 33, "method": "text", "text": "\n".join(
+        ["BALANCE SHEET", "AS AT MARCH 31, 2017", "PARTICULARS Note No. As At As At", "March 31, 2017 March 31, 2016",
+         "EQUITY AND LIABILITIES", "Shareholders' Funds", "Share Capital 2 432.00 432.00",
+         "Reserves and Surplus 3 12,000.00 11,500.00", "Non-Current Liabilities", "Long-term borrowings 4 3,000.00 3,100.00",
+         "Current Liabilities", "Trade payables 5 2,000.00 2,100.00", "TOTAL 27,847.00 26,000.00", "ASSETS",
+         "Non-Current Assets", "Fixed Assets 6 15,000.00 14,000.00", "Current Assets", "Inventories 7 5,000.00 4,500.00",
+         "TOTAL 27,847.00 26,000.00"] + [f"Other line {i} {100 + i}.00 {90 + i}.00" for i in range(12)])}
+    locs = locate_statements([directors, bs], cfg, 2017)
+    assert locs["balance_sheet"].start_page == 33
+
+
+def test_a_thousands_caption_below_the_sheet_is_read(cfg):
+    rows = ["Property,Plant and Equipment 4 665 689", " - Investments 5 1,323,772 1,336,376",
+            "Total Non-Current Assets 1,324,531 1,337,159", "Inventories 6 1,000,000 1,100,000",
+            "Total Current Assets 2,478,180 2,400,000", "Total Assets 3,802,711 3,737,159",
+            "Total Equity and Liabilities 3,802,711 3,737,159"]
+    page = _bs_page(25, None, rows + ["Place : Kolkata", "BALANCE SHEET AS AT 31ST MARCH, 2018", "(₹ in '000)"])
+    got, info = _bs_unit([page], cfg)
+    assert info["unit"] == "thousand" and got[("total_assets", 2020)] == pytest.approx(380.2711)
+
+
+def test_a_misread_report_does_not_displace_a_filing_in_line_with_the_other_years():
+    from bpp.features.financials import SOURCE_COMPARATIVE, xbrl_unit_checks
+    figs = pd.DataFrame([   # the same wrong line read in two reports: 5.02 lakh, "confirmed" by the comparative
+        {"firm_id": "BSE5", "fy": 2022, "field": "total_assets", "value_cr": 0.0502, "source": SOURCE_PRIMARY,
+         "source_doc_id": "BSE5_FY2022", "unit_confidence": 0.95},
+        {"firm_id": "BSE5", "fy": 2022, "field": "total_assets", "value_cr": 0.0502, "source": SOURCE_COMPARATIVE,
+         "source_doc_id": "BSE5_FY2023", "unit_confidence": 0.95},
+    ])
+    ex = pd.DataFrame([("BSE5", 2021, "total_assets", 197.93), ("BSE5", 2022, "total_assets", 46.12),
+                       ("BSE5", 2023, "total_assets", 7.03), ("BSE5", 2024, "total_assets", 4.87)],
+                      columns=["firm_id", "fy", "field", "value_cr"])
+    assert xbrl_unit_checks(figs, ex)[("BSE5", 2022)] == "pdf_unit_suspect"

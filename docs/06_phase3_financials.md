@@ -22,7 +22,7 @@ repeated.
 | 2 | **Read the header** | The unit (`(Rs. in crore)`, `(₹ in lakhs)`…) and the period columns (`As at 31 March 2019 | 2018`) are read once and applied to every line beneath. |
 | 3 | **Walk the lines** | Sub-headings are tracked as context, so `Borrowings` under *Non-current liabilities* becomes long-term debt and under *Current liabilities* short-term debt. |
 | 4 | **Map** | Line items are matched to the standard fields by pattern first, fuzzy similarity second. The score is kept. |
-| 5 | **Both columns** | The current-year **and** prior-year columns are read, so one report covers two years. |
+| 5 | **Both columns** | The current-year **and** prior-year columns are read, so one report covers two years. The first Ind AS balance sheets (FY2017-18) carry a third column, the opening balance sheet at 1 April two years back; it is recognised from the header and skipped (`opening_balance_sheet_column_skipped`), so the first two columns stay this year and last year. |
 
 **Where the unit comes from** (in this order; found necessary on the full cohort's 1,048 reports,
 where 66 company-years were first read a power of ten off the XBRL filing):
@@ -117,6 +117,7 @@ the pair-matched design survives; if it is large on the distressed side, say so 
 | figures that cannot be negative | `negative_<field>` |
 | the page carries too few figures to be a statement | `few_money_lines_on_page` |
 | two different scales both look like captions, or the unit came from another page | `unit_ambiguous_read_as_<unit>` |
+| a third (opening balance sheet) column was recognised and skipped | `opening_balance_sheet_column_skipped` |
 | where a unit not printed at the top was found | `unit_caption_found_below_statement`, `unit_caption_decoded_from_shifted_font`, `unit_from_<statement>`, `unit_from_accounting_policy_note`, `unit_from_note_captions`, `unit_inferred_rupee_from_magnitude` |
 | the first money column is not the report's own year | `first_column_is_not_the_report_year` |
 
