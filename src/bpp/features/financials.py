@@ -359,6 +359,24 @@ def xbrl_unit_checks(figures: pd.DataFrame, exchange: pd.DataFrame) -> dict[tupl
             other = x_lookup.get((firm_id, year))
             return bool(other) and abs(other) <= _IMPLAUSIBLE_ASSETS_CR and 1 / 3 <= value / other <= 3
 
+        def spread(value: float) -> float | None:
+            """Median distance, in powers of ten, from the firm's filings for its other years."""
+            others = [abs(v) for (f, y), v in x_lookup.items()
+                      if f == firm_id and y != fy and v and abs(v) <= _IMPLAUSIBLE_ASSETS_CR]
+            if not others or not value:
+                return None
+            gaps = sorted(abs(np.log10(abs(value) / o)) for o in others)
+            return gaps[len(gaps) // 2]
+
+        # First, which figure sits with the firm's other years: a side a power of ten
+        # further away than the other is the one that slipped. (A report misread the
+        # same way in two years agreed with its own comparative and displaced a correct
+        # filing on the full cohort; a collapsing firm's filings fail the 1/3-3 band.)
+        sp, sx = spread(pv), spread(xv)
+        if sp is not None and sx is not None and abs(sp - sx) >= 1:
+            out[key] = "xbrl_unit_suspect" if sp < sx else "pdf_unit_suspect"
+            continue
+
         # Which side slipped? Evidence independent of the unit caption, which can
         # itself be misread (a lakh statement read as crore made every figure 100x):
         # * the report's scale holds if its own prior-year column matches last

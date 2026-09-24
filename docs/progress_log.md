@@ -10,26 +10,33 @@ What was done each working session, newest first. Keep entries short: what, resu
   cohort's reports and every candidate peer's size-year XBRL (6,921 filings, 540 MB of JSON).
 - **Text:** 1,143 reports, 147,662 pages (7,436 OCR'd), no failures. OCR is capped at 5,000 px per page.
 - **Leakage review:** 55 more flagged reports read; 35 excluded under the pilot rule (38 of 62 in all).
-- **Phase 3 unit reading fixed** after the first run read 66 company-years a power of ten off the XBRL:
-  captions below the signatures or in the heading line, captions on another statement or in the
-  accounting-policy note, a shifted-font caption, "hundreds", a boilerplate lakh caption over rupees,
-  a bare "Rs." header over lakhs. Unit arbitration now uses all of a firm's filings and the report's
-  own comparatives. 14 regression tests. The report CIN check reads the whole report.
-- **Result:** reader vs XBRL within 1% **91.6%** of 10,176 figures (was 80.0%); 729 modelling rows
-  (367/362), 604 with usable financials after the pair rule. **Unrecoverable company-years:
-  distressed 67 of 544, healthy 49 of 544**, 95 of them FY2016–2018. 135 of 136 insolvent firms
+- **Phase 3 fixes** after the first run (66 company-years read a power of ten off the XBRL):
+  unit captions below the signatures, in the heading line, on another statement, in the
+  accounting-policy note or in a shifted font; "hundreds" and `'000`; a boilerplate lakh caption over
+  rupees; a bare "Rs." header over lakhs. **Three-column Ind AS transition balance sheets** (66
+  reports) were read one column off; the opening column is now skipped. A directors'-report line is
+  no longer taken for the balance sheet. Unit arbitration uses all of a firm's filings. 19 regression
+  tests. The report CIN check reads the whole report.
+- **Result:** reader vs XBRL within 1% **92.0%** of 10,246 figures (was 80.0%); 729 modelling rows
+  (367/362), 620 with usable financials after the pair rule. **Unrecoverable company-years:
+  distressed 60 of 544, healthy 41 of 544**, 80 of them FY2016–2018. 135 of 136 insolvent firms
   confirmed by their own CIN.
 
-**Found, for the team to decide (Phase 1 inputs, not changed)**
+**Found, for the team to decide (Phase 1–2 inputs, not changed)**
 - P0093: IBBI's insolvent company is Asian Hotels (West) (BSE533221); the name match picked Asian
-  Hotels (East) (BSE533227), which is not insolvent. Re-match or drop the pair.
+  Hotels (East) (BSE533227), which is not insolvent. Re-match (peers within ±30% exist: Oriental
+  Hotels, HLV) or drop the pair.
 - P0100: the peer Rane (Madras) was sized on an XBRL filing 100x too small (₹11.78 crore; really
-  ~₹1,178 crore). Pick another peer or drop the pair.
+  ~₹1,178 crore). No other candidate within ±30%: drop the pair.
+- P0103: the "healthy" peer is the insolvent firm itself - Future Enterprises' DVR share listing
+  (BSE570002). No other candidate within ±30%: drop the pair.
 - MAX ALERT and Dhruv Wellness found no peer because their size-year XBRL is unit-slipped (22.8 lakh
   crore and 6.2 lakh crore); re-sizing them from their reports could add up to 2 pairs.
+- Simplex Projects (P0090): the exchange's "FY2020" and "FY2021" reports are its FY2019 and FY2020
+  reports (the real FY2021 report is not on the exchange). Treat those two years as missing?
 
-**Next:** the team's answers on the three points above; the spot-check sheet
-(`interim/qa/financials_spot_check.csv`, 109 company-years) needs a person; then modelling.
+**Next:** the team's answers; the spot-check sheet (`interim/qa/financials_spot_check.csv`,
+109 company-years) needs a person; then modelling.
 
 ## 2026-09-24 — Decisions taken; Phase 2 CARO/opinion fix; full cohort started
 

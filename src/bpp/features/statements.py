@@ -39,8 +39,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
 
-from bpp.features.numbers import (TO_CRORE, ParsedNumber, detect_unit, is_note_reference, parse_number,
-                                  split_label_and_figures)
+from bpp.features.numbers import (TO_CRORE, ParsedNumber, detect_unit, find_cell_spans, is_note_reference,
+                                  parse_number, split_label_and_figures)
 
 log = logging.getLogger(__name__)
 
@@ -141,6 +141,18 @@ _TAIL_REST = re.compile(
     r"|thousands?|hundreds?|unless|otherwise|stated|except|per|share|data|and|standalone|audited)\b"
     r"[\s,.:;()\[\]\-–|`₹*]*)*$",
     re.I)
+
+
+#: what a balance-sheet page says; a directors' report's "Balance carried forward to / Balance
+#: Sheet" line wrapped into a bare heading and won as the earliest page (a real report)
+_BALANCE_SHEET_WORDS = [re.compile(p, re.I) for p in (
+    r"equity\s+and\s+liabilit", r"share\s*holders?['’`]?\s*funds?", r"non[\s-]*current\s+assets",
+    r"non[\s-]*current\s+liabilit", r"(?<!non-)(?<!non )\bcurrent\s+assets", r"(?<!non-)(?<!non )\bcurrent\s+liabilit",
+    r"total\s+assets", r"other\s+equity|reserves\s*(?:and|&)\s*surplus", r"property,?\s+plant|fixed\s+assets")]
+
+
+def _reads_like_balance_sheet(text: str) -> bool:
+    return sum(1 for p in _BALANCE_SHEET_WORDS if p.search(text)) >= 3
 
 
 _BARE_HEADING = re.compile(r"(?:(?:standalone|consolidated|separate)\s+)?(?:audited\s+)?balance\s+sheet", re.I)
@@ -248,7 +260,8 @@ def locate_statements(pages: list[dict[str, Any]], cfg: dict[str, Any],
         substantive = [h for h in substantive
                        if not _BARE_HEADING.fullmatch(h[3])
                        or (not _CONTENTS.search(by_page[h[2]]["text"])
-                           and money_lines.get(h[2], 0) >= 0.5 * best_lines)]
+                           and money_lines.get(h[2], 0) >= 0.5 * best_lines
+                           and _reads_like_balance_sheet(by_page[h[2]]["text"]))]
         pool = substantive or candidates
         anchor = out.get("balance_sheet")
         if name != "balance_sheet" and anchor is not None:
@@ -277,6 +290,9 @@ def locate_statements(pages: list[dict[str, Any]], cfg: dict[str, Any],
         head_text = by_page[start_page]["text"][:1500]
         _read_unit(loc, by_page[start_page]["text"], fcfg["default_unit"])
         loc.period_fys, loc.period_confidence = detect_period_columns(head_text, report_fy)
+        if name == "balance_sheet" and _has_opening_column(by_page[start_page]["text"], loc.period_fys):
+            loc.period_fys = loc.period_fys + [OPENING_COLUMN]
+            loc.flags.append("opening_balance_sheet_column_skipped")
         if loc.period_confidence < 0.5:
             loc.flags.append("period_columns_assumed")
         if loc.period_fys and report_fy and loc.period_fys[0] != report_fy:
@@ -353,13 +369,13 @@ def _units_from_rest_of_report(out: dict[str, StatementLocation], pages: list[di
             loc.flags.append(how)
 
 
-_SCALE_WORD = r"(?:crores?|lakhs?|lacs?|hundreds?|millions?|thousands?|billions?)"
+_SCALE_WORD = r"(?:\b(?:crores?|lakhs?|lacs?|hundreds?|millions?|thousands?|billions?)\b|['’]000)"
 
 #: a line that is only a unit caption: "(Rs in Lakh)", "(All amounts are in Rs. Lakhs, unless
 #: otherwise stated)", "(Amount in INR lakhs)", "(Rupees in crores)"
-_CAPTION_LINE = re.compile(r"^[^\n\d]{0,70}?\b" + _SCALE_WORD + r"\b[^\n\d]{0,80}\)?\s*$", re.I)
+_CAPTION_LINE = re.compile(r"^[^\n\d]{0,70}?" + _SCALE_WORD + r"[^\n\d]{0,80}\)?\s*$", re.I)
 #: a bracketed caption inside a longer line: "Balance sheet as at 31 March 2019 ( ` in Lakhs)"
-_CAPTION_GROUP = re.compile(r"\([^()\d\n]{0,60}?\b" + _SCALE_WORD + r"\b[^()\d\n]{0,90}\)?", re.I)
+_CAPTION_GROUP = re.compile(r"\([^()\d\n]{0,60}?" + _SCALE_WORD + r"[^()\d\n]{0,90}\)?", re.I)
 #: a bracketed caption that names the currency only: "(Amount in `)", "(Amount in Rs.)", "(In Rs.)"
 _RUPEE_CAPTION = re.compile(
     r"\(\s*(?:(?:all\s+)?(?:amounts?|figures?)\s+(?:are\s+)?)?in\s+(?:rs\.?|₹|`|inr|rupees|indian\s+rupees)\s*\)",
@@ -465,6 +481,64 @@ _FY_LABEL = re.compile(
     r"\b(?:FY\s*'?)?(?:19|20)\d{2}\s*[-/–]\s*\d{2,4}\b"
     r"|\bFY\s*'?\d{2,4}\b", re.I)
 #: prose that happens to contain years -- a regrouping note, not a column header
+#: the column of a balance sheet that is read but filed under no year (see _has_opening_column)
+OPENING_COLUMN = 0
+#: "As at 1st April, 2016", "April 1, 2016", "01.04.2016": the Ind AS transition date
+_OPENING_DAY = re.compile(r"\b0?1\s*(?:st)?[\s-]*(?:of\s+)?apr(?:il)?\b|\bapr(?:il)?[\s-]*0?1\s*(?:st)?\b|\b0?1[./-]0?4[./-]",
+                          re.I)
+_OPENING_YEAR = re.compile(r"\s*[,.'’-]?\s*((?:19|20)?\d{2})\b")
+#: a sentence about the transition is not a column header
+_TRANSITION_PROSE = re.compile(r"adopt|transition|with\s+effect|w\.\s*e\.\s*f|effective|\bfrom\b", re.I)
+
+
+def _money_cell(token: str, kind: str) -> bool:
+    return kind == "nil" or "," in token or "(" in token or bool(re.search(r"\.\d{1,2}\)?$", token))
+
+
+def _has_opening_column(text: str, period_fys: list[int]) -> bool:
+    """A balance sheet with a third column: the opening balance sheet of the Ind AS transition.
+
+    The first Ind AS reports (FY2017 and FY2018) print "As at 31 March 2018 | 31 March
+    2017 | 1 April 2016". Read as two columns, the last two figures were taken, so every
+    line filed last year's figure as this year's and the opening balance as last year's
+    (76 reports of the full cohort). The opening date must be in the header, a year before
+    the comparative year, and most figure lines must carry three money cells.
+    """
+    if len(period_fys) != 2 or period_fys[0] - period_fys[1] != 1:
+        return False
+    opening_year = str(period_fys[1] - 1)
+    # the header lines joined: the day, the month and the year are often split over
+    # lines ("As at 1st" / "April, 2015"), or the dates are on one line and the years
+    # on the next ("As at 31 March, As at 31 March, As at 1 April," / "2018 2017 2016")
+    header = " ".join(ln.strip() for ln in text[:1500].split("\n")
+                      if len(ln) <= 160 and not _NOT_A_COLUMN_HEADER.search(ln)
+                      and not _TRANSITION_PROSE.search(ln))
+    found = False
+    for m in _OPENING_DAY.finditer(header):
+        year = _OPENING_YEAR.match(header, m.end())
+        if year and len(year.group(1)) == 4 and year.group(1) != opening_year:
+            nearby = re.findall(r"\b(?:19|20)\d{2}\b", header[m.end():m.end() + 40])
+            found = opening_year in nearby[:3]          # "1 April, 2018 2017 2016"
+        else:
+            found = bool(year) and year.group(1)[-2:] == opening_year[-2:]
+        if found:
+            break
+    if not found:
+        return False
+    three = two = 0
+    for line in text.split("\n"):
+        trailing = 0
+        for token, kind, _, _ in reversed(find_cell_spans(line)):
+            if not _money_cell(token, kind):
+                break
+            trailing += 1
+        if trailing >= 3:
+            three += 1
+        elif trailing == 2:
+            two += 1
+    return three >= 4 and three >= two
+
+
 _NOT_A_COLUMN_HEADER = re.compile(
     r"regroup|reclassif|restat|refer\s+note|previous\s+year\s+figures|"
     r"have\s+been|comparativ\w*\s+(?:figures|information)\s+", re.I)
@@ -1056,7 +1130,7 @@ def map_statement(items: Iterable[LineItem], loc: StatementLocation) -> list[Fie
             # read from layout, not from a printed label: an explicit label outranks it
             score, how = min(score, 0.9), item.source
         for col, parsed in enumerate(item.figures):
-            if not parsed.ok or col >= len(loc.period_fys):
+            if not parsed.ok or col >= len(loc.period_fys) or loc.period_fys[col] == OPENING_COLUMN:
                 continue
             hits.append(FieldHit(
                 field=fieldname, fy=loc.period_fys[col], value=parsed.value, column=col,
