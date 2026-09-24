@@ -353,8 +353,47 @@ def step_full_sizing(D: Path, cfg: dict, jobs_out: Path) -> None:
     uniq = {i["key"]: i for i in _new_items(D, items)}
     path = J.write_jobs(jobs_out, "013_full_candidate_xbrl", uniq.values(),
                        "Full cohort: standalone annual XBRL of every possible peer for its pair's size year.",
-                       delay_s=0.4)
+                       delay_s=0.4, per_job=1000)
     log.info("candidate XBRL files: %d (no XBRL for %d candidate-years); wrote %s", len(uniq), missing, path)
+
+
+def _firm_year_items(t: dict, firm_years: list[tuple[str, int]]) -> tuple[list[dict], list[tuple[str, int]]]:
+    """Report PDF and XBRL download items for (bse_code, fy) pairs, and those with no report listed."""
+    rep = t["reports"]
+    have_rep = rep.set_index(["bse_code", "fy"]).sort_index() if len(rep) else None
+    xb = t["xbrl_index"].dropna(subset=["xbrl_url"]).set_index(["bse_code", "fy"])
+    items, missing = [], []
+    for code, fy in firm_years:
+        firm_id = f"BSE{code}"
+        if have_rep is not None and (code, fy) in have_rep.index:
+            hit = have_rep.loc[(code, fy)]
+            url = hit.iloc[0]["url"] if isinstance(hit, pd.DataFrame) else hit["url"]
+            items.append(J.report_pdf(firm_id, fy, url))
+        else:
+            missing.append((firm_id, fy))
+        if (code, fy) in xb.index:
+            items.append(J.xbrl_file(firm_id, fy, xb.loc[(code, fy), "xbrl_url"]))
+    return items, missing
+
+
+def step_full_distressed_reports(D: Path, cfg: dict, jobs_out: Path) -> None:
+    """The insolvent firms' own reports can come down while their peers are still being found.
+
+    Written in small jobs so that a matching job written later (a lower number) runs
+    between them instead of waiting for every report.
+    """
+    t = load_tables(D)
+    new = _full_new(D)
+    n_cand = cfg["cohort"]["n_candidate_years"]
+    fys = [(r["bse_code"], fy) for _, r in new.iterrows()
+           for fy in range(int(r["reference_fy"]) - n_cand + 1, int(r["reference_fy"]) + 1)]
+    items, missing = _firm_year_items(t, fys)
+    items = _new_items(D, list({(i.get("path") or i["key"]): i for i in items}.values()))
+    paths = J.write_jobs(jobs_out, "019_full_distressed_reports", items,
+                         "Full cohort: annual-report PDFs and XBRL of the insolvent firms' candidate years "
+                         "(their peers' follow once matched).", delay_s=1.0, per_job=120)
+    log.info("%d items (%d PDFs) in %d jobs; no report listed for %d firm-years",
+             len(items), sum(1 for i in items if i.get("expect") == "pdf"), len(paths), len(missing))
 
 
 def _in_tolerance(new: pd.DataFrame, cands: pd.DataFrame, assets: dict, tol: float) -> pd.DataFrame:
@@ -461,7 +500,7 @@ def step_full_finalize(D: Path, cfg: dict, jobs_out: Path) -> None:
     uniq = _new_items(D, list({(i.get("path") or i["key"]): i for i in items}.values()))
     path = J.write_jobs(jobs_out, "015_full_reports", uniq,
                        "Full cohort: annual-report PDFs and standalone XBRL results for every firm-year of the "
-                       "new pairs.", delay_s=1.0)
+                       "new pairs.", delay_s=1.0, per_job=120)
     log.info("report job: %d items (%d PDFs); no report listed for %d firm-years; wrote %s",
              len(uniq), sum(1 for i in uniq if i.get("expect") == "pdf"), len(missing), path)
 
@@ -507,7 +546,7 @@ def main() -> None:
     ap.add_argument("--data-dir", required=True, type=Path)
     ap.add_argument("step", choices=["parse", "select", "candidates", "peers", "finalize", "xbrl", "manifest",
                                      "full-select", "full-candidates", "full-sizing", "full-shortlist",
-                                     "full-finalize"])
+                                     "full-finalize", "full-distressed-reports"])
     ap.add_argument("--n", type=int, default=40)
     ap.add_argument("--n-pairs", type=int, default=30)
     ap.add_argument("--years", default="2019-2025")
@@ -533,7 +572,8 @@ def main() -> None:
     else:
         {"full-select": step_full_select, "full-candidates": step_full_candidates,
          "full-sizing": step_full_sizing, "full-shortlist": step_full_shortlist,
-         "full-finalize": step_full_finalize}[a.step](a.data_dir, cfg, a.jobs_out)
+         "full-finalize": step_full_finalize,
+         "full-distressed-reports": step_full_distressed_reports}[a.step](a.data_dir, cfg, a.jobs_out)
 
 
 if __name__ == "__main__":
