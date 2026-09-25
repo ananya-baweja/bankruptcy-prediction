@@ -102,3 +102,32 @@ def test_a_report_excluded_on_leakage_review_takes_its_pair_partner_with_it(cfg)
     assert df.loc["H1_FY2018", "exclude_reason"] == "pair_partner_excluded"
     assert df.loc["D1_FY2017", "included"] and not df.loc["D1_FY2017", "needs_leakage_review"]
     assert df.loc["D1_FY2017", "leakage_review"] == "keep"
+
+
+def test_a_report_filed_under_the_wrong_year_counts_as_missing(cfg):
+    from bpp.extract.sections import report_year_check
+    # Simplex Projects' "FY2020" report is its FY2019 report: FY2020 is never named
+    pages = [{"page": i, "text": "Statement of Profit and Loss for the year ended 31st March, 2019 | "
+                                  "year ended 31st March, 2018"} for i in range(1, 6)]
+    assert report_year_check(pages, 2020)["mismatch"] == "earlier_year_report"
+    assert report_year_check(pages, 2019)["mismatch"] == ""
+    later = [{"page": 1, "text": "for the year ended March 31, 2021 " * 6 + "year ended March 31, 2020 " * 2}]
+    assert report_year_check(later, 2020)["mismatch"] == "later_year_report"
+    # a report that names a later year now and then (a loan falling due) is its own year's
+    own = [{"page": 1, "text": "year ended 31 March 2022 " * 20 + "year ended 31 March 2027 " * 3}]
+    assert report_year_check(own, 2022)["mismatch"] == ""
+
+    cohort = pd.DataFrame([
+        {"pair_id": "P1", "firm_id": "D1", "company_name": "D1", "role": "distressed", "label": 1,
+         "reference_date": "2021-12-14", "petition_date": None},
+        {"pair_id": "P1", "firm_id": "H1", "company_name": "H1", "role": "healthy", "label": 0,
+         "reference_date": "2021-12-14", "petition_date": None},
+    ])
+    frame = build_sample_frame(cohort, cfg)
+    docs = [{"doc_id": f"{r.firm_id}_FY{r.fy}", "status": "registered", "source": "manual",
+             "local_path": "x.pdf", "pub_date": f"{r.fy}-08-30"} for r in frame.itertuples()]
+    info = {"D1_FY2020": {"report_year_mismatch": "earlier_year_report"}}
+    df, _ = assign_labels(frame, pd.DataFrame(docs), cohort, cfg, info, {})
+    df = df.set_index("doc_id")
+    assert df.loc["D1_FY2020", "exclude_reason"] == "report_is_for_another_year"
+    assert df.loc["H1_FY2020", "exclude_reason"] == "pair_partner_excluded"

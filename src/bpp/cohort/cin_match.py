@@ -96,6 +96,12 @@ class NameIndex:
 
 
 # ----------------------------------------------------------------- matching
+def _bracketed_score(a: str, b: str) -> float:
+    """Similarity of two company names with the words inside brackets kept."""
+    keep = lambda n: normalize_company_name(re.sub(r"[()\[\]]", " ", str(n or "")))  # noqa: E731
+    return token_sort_ratio(keep(a), keep(b))
+
+
 def match_debtors(debtors: pd.DataFrame, universe: pd.DataFrame, auto_accept: float = 98,
                   review: float = 80, top_k: int = 3) -> pd.DataFrame:
     """Best listing for each debtor, in the columns of ``ibbi_listed_matches.csv``.
@@ -118,9 +124,16 @@ def match_debtors(debtors: pd.DataFrame, universe: pd.DataFrame, auto_accept: fl
                 queries.append(n)
         best: dict[int, float] = {}
         for q in queries:
-            for score, i in index.search(q, limit=top_k):
+            for score, i in index.search(q, limit=top_k + 2):
                 best[i] = max(best.get(i, 0.0), score)
-        ranked = sorted(best.items(), key=lambda t: -t[1])[:top_k]
+        # Names that differ only in brackets tie after normalisation: IBBI's insolvent
+        # "Asian Hotels (West) Limited" scored 100 against Asian Hotels (East), (North)
+        # and (West), and the first of them was accepted (a wrong firm in the full
+        # cohort). The bracketed words break such a tie; other orderings are unchanged.
+        raw_names = [n for n in [d.get("corporate_debtor"), *str(d.get("all_names") or "").split(" | ")] if n]
+        bracketed = {i: max((_bracketed_score(n, uni.iloc[i]["company_name"]) for n in raw_names), default=0.0)
+                     for i in best}
+        ranked = sorted(best.items(), key=lambda t: (-t[1], -bracketed[t[0]]))[:top_k]
         rec = {k: d.get(k) for k in ("corporate_debtor", "cin", "cirp_announcement_date",
                                      "n_announcements", "applicant", "listing_evidence",
                                      "cin_nic", "cin_company_type", "self_filed", "all_names")}

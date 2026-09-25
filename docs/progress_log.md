@@ -2,6 +2,32 @@
 
 What was done each working session, newest first. Keep entries short: what, result, next.
 
+## 2026-09-25 — Cohort corrections applied; dataset complete for modelling
+
+**Decided (Gaurav):** "do whatever is correct" on the five recommendations below.
+
+**Done**
+- **Phase 1** (`exchange_pipeline.py parse` + `full-amend`; pairs keep their ids): name ties broken by
+  the words in brackets (only Asian Hotels (West) changed among 740 IBBI debtors); DVR / partly
+  paid-up listings (`IN9` ISIN) and same-name listings are never peers; sizing corrects XBRL filings a
+  clean power of ten off the firm's majority scale (40 filings). Retired P0093 (wrong firm - Asian
+  Hotels (West) itself is not eligible: 2 reports before admission), P0100 (peer sized on a filing 100x
+  too small), P0103 (peer was the firm's own DVR listing); added P0137 MAX ALERT + Shiva Granito and
+  P0138 Dhruv Wellness + Worldwide Aluminium. 8 report lists and 8 reports downloaded, 11 read.
+- **Phase 2:** a report whose own text is about another year is excluded (`report_is_for_another_year`):
+  3 reports (Fedders Electric FY2019; Simplex Projects FY2020 and FY2021). Leakage review: MAX ALERT
+  FY2020 kept (statutory "no CIRP initiated" statement).
+- **Phase 3:** an XBRL filing a clean power of ten off the firm's other filings is not used even when
+  the report has no figure to compare (Dhruv Wellness FY2023: ₹6.2 lakh crore).
+- **Result:** 135 pairs, 1,080 company-years, 719 modelling rows (362/357), 609 with usable financials.
+  Reader vs XBRL within 1%: 91.8% of 10,081 figures. **Unrecoverable company-years: distressed 62 of
+  540, healthy 40 of 540** (80 of them FY2016-18). All 135 insolvent firms confirmed by their own CIN.
+  No company-year is now a power of ten off its neighbours except two genuine changes. 5 new tests.
+
+**Next:** a person to fill in the spot-check sheet (`interim/qa/financials_spot_check.csv`, 108
+company-years); promoter pledge % (exchange shareholding filings) is the one planned feature not yet
+collected; then modelling.
+
 ## 2026-09-24/25 — Full cohort processed: 136 pairs, 1,048 reports, Phases 2–4
 
 **Done**
@@ -22,7 +48,7 @@ What was done each working session, newest first. Keep entries short: what, resu
   distressed 60 of 544, healthy 41 of 544**, 80 of them FY2016–2018. 135 of 136 insolvent firms
   confirmed by their own CIN.
 
-**Found, for the team to decide (Phase 1–2 inputs, not changed)**
+**Found, for the team to decide (Phase 1–2 inputs, not changed)** - resolved 25 Sep, see above
 - P0093: IBBI's insolvent company is Asian Hotels (West) (BSE533221); the name match picked Asian
   Hotels (East) (BSE533227), which is not insolvent. Re-match (peers within ±30% exist: Oriental
   Hotels, HLV) or drop the pair.

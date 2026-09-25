@@ -59,7 +59,7 @@ outgrows a hand-over; readers take the base file and every part together, the la
 | `documents.csv` | `doc_id, firm_id, fy, source, url, local_path, pub_date, sha256, n_bytes, status, note` |
 | `pages/<doc_id>.json` | `n_pages, n_text_pages, n_ocr_pages, n_needs_ocr_pages, n_empty_pages, n_chars, pages[{page, method, text}]` |
 | `sections/<doc_id>.json` | `sections{mdna, directors_report, auditor_report, caro_annexure, basis_for_modified_opinion, going_concern, emphasis_of_matter}` each `{heading, start_page, end_page, n_chars, text}` (or null); `audit_opinion`; `leakage{ibc_generic_mentions, cirp_specific_mentions}`; `runs`; `warnings` |
-| `extraction_report.csv` | `<section>_chars` per section, `n_ocr_pages`, `audit_opinion`, `auditor_scope`, leakage counts, `warnings` |
+| `extraction_report.csv` | `<section>_chars` per section, `n_ocr_pages`, `audit_opinion`, `auditor_scope`, leakage counts, `newest_year_named` (the latest year the report's own "year ended 31 March" phrases name at least 3 times), `report_year_mismatch` (`earlier_year_report` / `later_year_report` when the exchange listed another year's report under this year), `warnings` |
 | `qa/section_qa_sheet.csv` | predicted pages/heading/snippets + `found_correct, start_correct, end_correct, true_start_page, true_end_page, notes` |
 | `qa/section_qa_scores.csv` | per section: `n_checked, found_accuracy, start_accuracy, end_accuracy, exact_span_accuracy` |
 | `qa/financials_spot_check.csv` | a random 10% of company-years x every extracted field: `firm_id, fy, field, value_cr, source, source_doc_id, page, statement, label, printed, unit, confidence, parse_flags` + `value_correct, page_correct, true_value_cr, notes` to fill in |
@@ -76,6 +76,9 @@ outgrows a hand-over; readers take the base file and every part together, the la
 | `full_peer_candidates.csv` | `distressed_code, candidate_code, reference_fy, match_quality`: every possible peer (same BSE sub-group, not in the CIRP match list, not a pilot peer) |
 | `full_pairs.csv` | the new pairs: `distressed_code, peer_code, reference_fy, size_fy, distressed_assets, peer_assets, asset_ratio, match_quality, n_candidates, admission_date` |
 | `full_unmatched.csv` | insolvent firms left without a peer, with the reason |
+| `amend_retired_pairs.csv` | pairs retired by `full-amend` (25 Sep 2026), with the reason: the IBBI debtor is another listed company, the firm's reports print another CIN, the peer is another listing of the firm itself, or the size match fails once slipped XBRL is corrected |
+| `amend_pairs.csv`, `amend_unmatched.csv` | pairs formed by `full-amend` for insolvent firms left without one (numbered after the last pair), and those still without a peer |
+| `xbrl_unit_corrections.csv` | XBRL total assets a power of ten off the firm's other filings, as filed and as used for sizing (`bse_code, fy, filed_value_cr, corrected_cr, median_other_years_cr, power`) |
 | `xbrl_financials_exchange.csv` | `firm_id, fy, field, value_cr, source_url, note` parsed from the exchange XBRL filings (Rs crore) - Phase 3 reads it first when `xbrl_priority: first` |
 | `report_cin_check.csv` | per insolvent firm: the IBBI CIN, the CIN printed in its reports (whole report read; OCR's O-for-0 undone), and `confirmed / confirmed_reg_no` (listing status or type changed) `/ confirmed_state_changed` (Andhra Pradesh to Telangana) `/ mismatch` (the CIN printed most often is given) `/ cin_not_found` |
 | `text_extraction_summary.csv` | per report: pages, OCR pages, backend, seconds |
@@ -98,7 +101,7 @@ outgrows a hand-over; readers take the base file and every part together, the la
 | `pub_date, pub_date_source` | filing date, or FY end + 183 days if `assumed` |
 | `months_before_reference, days_before_reference` | time from publication to admission |
 | `filing_delay_days` | publication − FY end (late filing is a distress signal) |
-| `exclude_reason` | blank if included; else `missing_document`, `published_within_180d_of_admission`, `published_after_petition`, `pair_partner_excluded`, `beyond_n_years_before` |
+| `exclude_reason` | blank if included; else `missing_document`, `report_is_for_another_year`, `published_within_180d_of_admission`, `published_after_petition`, `leakage_review_excluded`, `pair_partner_excluded`, `beyond_n_years_before` |
 | `included` | True for rows used in modelling |
 | `horizon` | `t-1`, `t-2`, `t-3` (rank of the FY within the pair, newest first) |
 | `within_12m, within_24m` | distressed and published ≤12 / ≤24 months before admission |

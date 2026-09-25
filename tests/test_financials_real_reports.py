@@ -855,3 +855,12 @@ def test_a_misread_report_does_not_displace_a_filing_in_line_with_the_other_year
                        ("BSE5", 2023, "total_assets", 7.03), ("BSE5", 2024, "total_assets", 4.87)],
                       columns=["firm_id", "fy", "field", "value_cr"])
     assert xbrl_unit_checks(figs, ex)[("BSE5", 2022)] == "pdf_unit_suspect"
+
+
+def test_a_slipped_filing_with_no_report_figure_is_still_caught():
+    from bpp.features.financials import xbrl_unit_checks
+    figs = pd.DataFrame(columns=["firm_id", "fy", "field", "value_cr", "source", "source_doc_id", "unit_confidence"])
+    ex = pd.DataFrame([("BSE4", 2021, "total_assets", 6.1843), ("BSE4", 2022, "total_assets", 6.1320),
+                       ("BSE4", 2023, "total_assets", 620583.24)], columns=["firm_id", "fy", "field", "value_cr"])
+    checks = xbrl_unit_checks(figs, ex)
+    assert checks == {("BSE4", 2023): "xbrl_unit_suspect"}

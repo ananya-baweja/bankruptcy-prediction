@@ -469,24 +469,68 @@ def segment_document(pages: list[dict[str, Any]], cfg: dict[str, Any]) -> dict[s
     }
 
 
+#: "for the year ended 31st March, 2019", "year ended March 31, 2019", "period ended 31.03.2019"
+_YEAR_ENDED = re.compile(
+    r"(?:year|period)\s+ended\s+(?:on\s+)?(?:31\s*(?:st)?\s*(?:of\s+)?march[,\s]*|march\s*31\s*(?:st)?[,\s]*"
+    r"|31[./-]0?3[./-])((?:19|20)\d\d)", re.I)
+
+
+def report_year_check(pages: list[dict[str, Any]], filed_fy: int | None, min_mentions: int = 3) -> dict[str, Any]:
+    """Whether a report's own text is about the year it is filed under.
+
+    The exchange can list a report under the wrong year: on the full cohort one
+    company's "FY2019" report was its 2017-18 report and another's "FY2020" and
+    "FY2021" reports were its FY2019 and FY2020 reports. A report that never names its
+    filed year in a "year ended 31 March" phrase while naming an earlier one at least
+    ``min_mentions`` times is an earlier year's report; one that names a later year
+    more often than its own is a later year's (and its real publication date is later
+    than assumed, a leakage risk).
+    """
+    counts: dict[int, int] = {}
+    for page in pages:
+        for m in _YEAR_ENDED.finditer(page.get("text") or ""):
+            year = int(m.group(1))
+            counts[year] = counts.get(year, 0) + 1
+    named = [y for y, n in counts.items() if n >= min_mentions]
+    newest = max(named) if named else None
+    own = counts.get(int(filed_fy), 0) if filed_fy else 0
+    mismatch = ""
+    if filed_fy and newest is not None:
+        if newest < int(filed_fy) and own == 0:
+            mismatch = "earlier_year_report"
+        elif newest > int(filed_fy) and counts.get(newest, 0) > own:
+            mismatch = "later_year_report"
+    top = dict(sorted(counts.items(), key=lambda kv: -kv[1])[:4])
+    return {"filed_fy": filed_fy, "filed_fy_mentions": own, "newest_named_fy": newest,
+            "year_mentions": {str(k): v for k, v in top.items()}, "mismatch": mismatch}
+
+
 def run_extract_sections(cfg: dict[str, Any], paths: Paths, doc_ids: list[str] | None = None,
                          force: bool = False) -> pd.DataFrame:
     files = sorted(paths.pages.glob("*.json"))
     if doc_ids:
         files = [f for f in files if f.stem in set(doc_ids)]
-    n = 0
+    n = checked = 0
     for f in tqdm(files, desc="extract sections"):
         out = paths.sections / f.name
         if out.exists() and not force:
+            # sections already cut; add the year check to files written before it existed
+            js = json.loads(out.read_text(encoding="utf-8"))
+            if "year_check" not in js:
+                pj = json.loads(f.read_text(encoding="utf-8"))
+                js["year_check"] = report_year_check(pj["pages"], pj.get("fy"))
+                out.write_text(json.dumps(js, ensure_ascii=False, indent=1), encoding="utf-8")
+                checked += 1
             continue
         pj = json.loads(f.read_text(encoding="utf-8"))
         seg = segment_document(pj["pages"], cfg)
         res = {k: pj[k] for k in ["doc_id", "firm_id", "fy", "source_pdf", "n_pages", "n_ocr_pages",
                                   "n_needs_ocr_pages"] if k in pj}
         res.update(seg)
+        res["year_check"] = report_year_check(pj["pages"], pj.get("fy"))
         out.write_text(json.dumps(res, ensure_ascii=False, indent=1), encoding="utf-8")
         n += 1
-    log.info("segmented %d documents", n)
+    log.info("segmented %d documents (year check added to %d already segmented)", n, checked)
     return build_extraction_report(paths)
 
 
@@ -504,6 +548,9 @@ def build_extraction_report(paths: Paths) -> pd.DataFrame:
         if js["sections"].get("auditor_report"):
             row["auditor_scope"] = js["sections"]["auditor_report"].get("scope")
         row.update(js.get("leakage", {}))
+        yc = js.get("year_check") or {}
+        row["newest_year_named"] = yc.get("newest_named_fy")
+        row["report_year_mismatch"] = yc.get("mismatch", "")
         row["warnings"] = "; ".join(js.get("warnings", []))
         rows.append(row)
     df = pd.DataFrame(rows)

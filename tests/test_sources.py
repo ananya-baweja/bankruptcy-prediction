@@ -271,3 +271,48 @@ def test_collect_parts_are_read_together_latest_wins(tmp_path):
     assert [p.stem for p in paths] == ["012_x_a", "012_x_b", "012_x_c"]
     job = json.loads(paths[1].read_text())
     assert job["items"][0]["collect"].endswith("bse_result_archive_012_x_b.jsonl")
+
+
+def test_a_name_tie_is_broken_by_the_words_in_brackets():
+    # IBBI's "Asian Hotels (West) Limited" tied at 100 with (East), (North) and (West) once
+    # brackets were dropped, and the first listing was accepted (full cohort, 2026-09-25)
+    universe = pd.DataFrame({
+        "firm_id": ["BSE533227", "BSE500023", "BSE533221"],
+        "company_name": ["Asian Hotels (East) Limited", "Asian Hotels (North) Limited", "Asian Hotels (West) Ltd"],
+        "name_norm": ["ASIAN HOTELS"] * 3, "bse_code": ["533227", "500023", "533221"],
+        "nse_symbol": [None] * 3, "isin": [None] * 3, "status": ["Active"] * 3, "industry": [None] * 3,
+    })
+    debtors = pd.DataFrame({
+        "corporate_debtor": ["Asian Hotels (West) Limited"], "name_norm": ["ASIAN HOTELS"],
+        "cin": ["L55101DL2007PLC157518"], "cirp_announcement_date": ["2022-09-17"],
+        "listing_evidence": ["cin_L"], "former_names": [""], "all_names": ["Asian Hotels (West) Limited"],
+    })
+    m = match_debtors(debtors, universe)
+    assert m.loc[0, "firm_id"] == "BSE533221" and m.loc[0, "match_status"] == "auto_accepted"
+
+
+def test_a_peer_is_never_another_listing_of_the_insolvent_firm():
+    from bpp.cohort.pilot import other_listings, peer_candidates
+    headers = pd.DataFrame({"bse_code": ["523574", "570002", "500001"],
+                            "isubgroup_code": ["IN020603003"] * 3})
+    isin = {"523574": "INE623B01027", "570002": "IN9623B01058", "500001": "INE000A01000"}
+    names = {"523574": "FUTURE ENTERPRISES", "570002": "FUTURE ENTERPRISES", "500001": "OTHER RETAIL"}
+    assert other_listings("523574", isin, names) == {"570002"}
+    firm = pd.DataFrame({"bse_code": ["523574"], "isubgroup_code": ["IN020603003"], "reference_fy": [2022]})
+    c = peer_candidates(firm, pd.DataFrame(columns=["bse_code", "isubgroup_code"]), headers, set(),
+                        isin_by_code=isin, name_by_code=names)
+    assert list(c["candidate_code"]) == ["500001"]
+
+
+def test_an_xbrl_filing_a_power_of_ten_off_its_other_years_is_corrected_for_sizing():
+    from bpp.cohort.pilot import correct_unit_slips
+    assets = {("534563", 2019): 29.21, ("534563", 2020): 31.14, ("534563", 2021): 2281739.19,   # MAX ALERT
+              ("532661", 2020): 866.08, ("532661", 2021): 946.03, ("532661", 2022): 11.94,         # Rane (Madras)
+              ("532661", 2023): 11.78, ("532661", 2024): 1352.15,
+              ("526409", 2019): 803.72, ("526409", 2021): 841.07, ("526409", 2022): 72.29,         # a real drop
+              ("999999", 2020): 5.0}                                                                 # one filing
+    fixed, log = correct_unit_slips(assets)
+    assert fixed[("534563", 2021)] == pytest.approx(22.8173919)
+    assert fixed[("532661", 2023)] == pytest.approx(1178.0) and fixed[("532661", 2022)] == pytest.approx(1194.0)
+    assert fixed[("526409", 2022)] == 72.29 and fixed[("999999", 2020)] == 5.0
+    assert set(zip(log["bse_code"], log["fy"])) == {("534563", 2021), ("532661", 2022), ("532661", 2023)}

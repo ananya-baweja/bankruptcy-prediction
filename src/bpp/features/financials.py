@@ -398,6 +398,24 @@ def xbrl_unit_checks(figures: pd.DataFrame, exchange: pd.DataFrame) -> dict[tupl
         else:
             confident = float(p.get("unit_confidence", 0.2) or 0.2) >= 0.8
             out[key] = "xbrl_unit_suspect" if confident else "pdf_unit_suspect"
+
+    # A filing a clean power of ten off the firm's other filings, with no report figure
+    # to judge it by: Dhruv Wellness filed FY2023 total assets of Rs 6.2 lakh crore (and
+    # revenue of Rs 38,966 crore) after Rs 6.2 crore in each of the two years before, and
+    # its reports print no total the reader could compare. The same majority-scale test
+    # that corrects sizing (``correct_unit_slips``) marks such a filing; a year whose
+    # report figure agrees with the filing is never marked.
+    from bpp.cohort.pilot import correct_unit_slips
+    plausible = {k: v for k, v in x_lookup.items() if v and abs(v) <= _IMPLAUSIBLE_ASSETS_CR}
+    _, slips = correct_unit_slips(plausible)
+    for code, fy in zip(slips["bse_code"], slips["fy"]):
+        key = (code, int(fy))
+        if key in out:
+            continue
+        agrees = [row for row in (pdf_lookup.get(key), comp_rows.get(key)) if row is not None
+                  and close(float(row["value_cr"]), x_lookup.get(key))]
+        if not agrees:
+            out[key] = "xbrl_unit_suspect"
     return out
 
 
