@@ -146,6 +146,46 @@ def step_cincheck(paths: Paths) -> None:
     log.info("report CIN check: %s", out["report_cin_check"].value_counts().to_dict())
 
 
+#: the report sections the narrative stream reads, as extracted in Phase 2
+EXPORT_SECTIONS = ["mdna", "directors_report", "auditor_report", "caro_annexure",
+                   "basis_for_modified_opinion", "going_concern", "emphasis_of_matter"]
+
+
+def step_export_text(paths: Paths, n_parts: int = 2) -> None:
+    """The cohort's report text in ``processed/`` so the dataset travels as one folder.
+
+    One JSON line per labelled report that exists: ids, the audit opinion and each
+    section's text (with its pages). Split in ``n_parts`` gzip files so that no part
+    outgrows a 20 MB transfer; non-ASCII is escaped so any JSON-lines reader splits
+    the lines correctly.
+    """
+    import gzip
+
+    lab = pd.read_csv(paths.documents_labeled, dtype=str)
+    docs = sorted(d for d, h in zip(lab["doc_id"], lab["has_document"]) if str(h) == "True")
+    recs = []
+    for d in docs:
+        f = paths.sections / f"{d}.json"
+        if not f.exists():
+            continue
+        js = json.loads(f.read_text(encoding="utf-8"))
+        rec = {"doc_id": d, "firm_id": js.get("firm_id"), "fy": js.get("fy"), "audit_opinion": js.get("audit_opinion"),
+               "n_pages": js.get("n_pages"), "n_ocr_pages": js.get("n_ocr_pages")}
+        for name in EXPORT_SECTIONS:
+            sec = js["sections"].get(name)
+            rec[name] = sec.get("text") if sec else None
+            if name in ("mdna", "directors_report", "auditor_report", "caro_annexure"):
+                rec[name + "_pages"] = [sec.get("start_page"), sec.get("end_page")] if sec else None
+        recs.append(rec)
+    size = -(-len(recs) // n_parts)
+    for k in range(n_parts):
+        out = paths.processed / f"report_sections_{k + 1}.jsonl.gz"
+        with gzip.open(out, "wt", encoding="utf-8", compresslevel=9) as fh:
+            for rec in recs[k * size:(k + 1) * size]:
+                fh.write(json.dumps(rec, ensure_ascii=True) + "\n")
+    log.info("report text of %d reports -> processed/report_sections_1..%d.jsonl.gz", len(recs), n_parts)
+
+
 def _cohort_doc_ids(paths: Paths) -> list[str] | None:
     """Reports of the cohort's firms (any year); None when there is no cohort yet."""
     cohort = paths.processed / "cohort.csv"
@@ -174,7 +214,7 @@ def step_phases(paths: Paths, cfg: dict, workers: int = 1) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--data-dir", required=True, type=Path)
-    ap.add_argument("step", choices=["text", "cincheck", "phases"])
+    ap.add_argument("step", choices=["text", "cincheck", "phases", "export-text"])
     ap.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 2)))
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--cohort-only", action="store_true", help="text: only the cohort's reports")
@@ -185,6 +225,8 @@ def main() -> None:
     paths = Paths(a.data_dir)
     if a.step == "text":
         step_text(paths, cfg, a.workers, a.force, a.cohort_only)
+    elif a.step == "export-text":
+        step_export_text(paths)
     elif a.step == "cincheck":
         step_cincheck(paths)
     else:

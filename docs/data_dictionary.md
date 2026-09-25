@@ -108,6 +108,13 @@ outgrows a hand-over; readers take the base file and every part together, the la
 | `has_<section>, audit_opinion, cirp_specific_mentions, ibc_generic_mentions` | from section extraction |
 | `needs_leakage_review` | distressed, included, and mentions CIRP terms → read it |
 
+### `report_sections_1.jsonl.gz`, `report_sections_2.jsonl.gz` — the report text (stream A)
+One JSON line per labelled report that exists (`process_reports.py export-text`): `doc_id, firm_id, fy,
+audit_opinion, n_pages, n_ocr_pages`, the text of `mdna, directors_report, auditor_report, caro_annexure,
+basis_for_modified_opinion, going_concern, emphasis_of_matter` (null when not found) and `<section>_pages`
+(start and end page). As extracted in Phase 2, not yet entity-masked. Two parts so neither outgrows a
+20 MB transfer; read both and concatenate.
+
 ### `financials_figures.csv` — one row per extracted figure (Phase 3 audit trail)
 `firm_id, fy, field, value_cr, source (exchange_xbrl | report_current_year | next_report_comparative | manual_xbrl),
 source_doc_id, page, statement, statement_scope, label, match_how, match_score, unit,
