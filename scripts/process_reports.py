@@ -51,7 +51,7 @@ def _write_summary(summ: Path, rows: list[dict]) -> None:
     pd.concat([old, new], ignore_index=True).to_csv(summ, index=False)
 
 
-def step_text(paths: Paths, cfg: dict, workers: int, force: bool) -> None:
+def step_text(paths: Paths, cfg: dict, workers: int, force: bool, cohort_only: bool = False) -> None:
     man = pd.read_csv(paths.documents, dtype=str)
     # The cohort's reports first: OCR takes hours, and reports of firms that found
     # no peer are only needed if they are matched later.
@@ -59,6 +59,8 @@ def step_text(paths: Paths, cfg: dict, workers: int, force: bool) -> None:
     if cohort.exists():
         in_cohort = set(pd.read_csv(cohort, dtype=str)["firm_id"])
         man = man.assign(_first=~man["firm_id"].isin(in_cohort)).sort_values("_first", kind="stable")
+        if cohort_only:
+            man = man[man["firm_id"].isin(in_cohort)]
     todo = []
     for _, r in man.iterrows():
         out = paths.pages / f"{r['doc_id']}.json"
@@ -175,13 +177,14 @@ def main() -> None:
     ap.add_argument("step", choices=["text", "cincheck", "phases"])
     ap.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 2)))
     ap.add_argument("--force", action="store_true")
+    ap.add_argument("--cohort-only", action="store_true", help="text: only the cohort's reports")
     a = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s",
                         datefmt="%H:%M:%S")
     cfg = load_config()
     paths = Paths(a.data_dir)
     if a.step == "text":
-        step_text(paths, cfg, a.workers, a.force)
+        step_text(paths, cfg, a.workers, a.force, a.cohort_only)
     elif a.step == "cincheck":
         step_cincheck(paths)
     else:

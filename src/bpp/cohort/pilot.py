@@ -139,9 +139,80 @@ def sample_pilot(elig: pd.DataFrame, n: int, seed: int, years: tuple[int, int]) 
     return pd.DataFrame(chosen).drop(columns="r").reset_index(drop=True)
 
 
+def other_listings(code: str, isin_by_code: dict[str, str], name_by_code: dict[str, str]) -> set[str]:
+    """Codes that are not a separate company from ``code``: its own other listings.
+
+    A DVR or partly paid-up share class has its own BSE code and an ``IN9`` ISIN
+    (Future Enterprises' DVR shares, BSE570002, were picked as the insolvent firm's
+    own "healthy" peer on the full cohort), and a company can appear under two codes
+    with the same name. Neither is a peer.
+    """
+    name = name_by_code.get(code)
+    same = {c for c, n in name_by_code.items() if name and n == name and c != code}
+    return same | {c for c, i in isin_by_code.items() if isinstance(i, str) and i.upper().startswith("IN9")}
+
+
+def correct_unit_slips(assets: dict[tuple[str, int], float], tol: float = 0.15,
+                       powers: tuple[int, ...] = (2, 3, 5, 7)) -> tuple[dict[tuple[str, int], float], pd.DataFrame]:
+    """Total assets from XBRL filings, with filings a power of ten off the firm's other years put right.
+
+    Companies type their XBRL by hand and some get the scale wrong: MAX ALERT filed
+    FY2021 total assets of Rs 22.8 lakh crore (its report: Rs 22.82 crore), and Rane
+    (Madras) filed FY2022-23 100x too small. Sizing on such a filing leaves a firm
+    without a peer or pairs it with a firm a hundred times its size.
+
+    A firm's filings are grouped by order of magnitude (a new group starts where two
+    neighbouring values are more than 10x apart). Only when one group holds a strict
+    majority of the filings (at least two) is it taken as the firm's scale; a filing
+    outside it is corrected when it sits a power of ten (10^2, 10^3, 10^5, 10^7) from
+    the group's median, within ``tol`` in log10, and lands inside the group's range
+    (widened by 2x). A firm whose filings split evenly between two scales, or with a
+    single filing, is left as it is.
+    """
+    by_firm: dict[str, dict[int, float]] = {}
+    for (code, fy), v in assets.items():
+        if v and v > 0:
+            by_firm.setdefault(code, {})[int(fy)] = float(v)
+    out = dict(assets)
+    rows = []
+    for code, years in by_firm.items():
+        if len(years) < 3:
+            continue
+        logs = sorted((float(np.log10(v)), fy) for fy, v in years.items())
+        groups, cur = [], [logs[0]]
+        for a, b in zip(logs, logs[1:]):
+            if b[0] - a[0] > 1.0:
+                groups.append(cur)
+                cur = []
+            cur.append(b)
+        groups.append(cur)
+        main = max(groups, key=len)
+        if len(main) < 2 or len(main) * 2 <= len(logs):
+            continue
+        centre = float(np.median([x for x, _ in main]))
+        lo, hi = main[0][0] - np.log10(2), main[-1][0] + np.log10(2)
+        members = {fy for _, fy in main}
+        for fy, v in years.items():
+            if fy in members:
+                continue
+            k = float(np.log10(v)) - centre
+            for p in powers:
+                for sign in (1, -1):
+                    fixed_log = float(np.log10(v)) - sign * p
+                    if abs(k - sign * p) < tol and lo <= fixed_log <= hi:
+                        out[(code, fy)] = v / 10 ** (sign * p)
+                        rows.append({"bse_code": code, "fy": fy, "filed_value_cr": v, "corrected_cr": v / 10 ** (sign * p),
+                                     "median_other_years_cr": 10 ** centre, "power": sign * p})
+    return out, pd.DataFrame(rows, columns=["bse_code", "fy", "filed_value_cr", "corrected_cr",
+                                            "median_other_years_cr", "power"])
+
+
 def peer_candidates(pilot: pd.DataFrame, members: pd.DataFrame, headers: pd.DataFrame,
-                    excluded_codes: set[str], prefix_len: int = 8) -> pd.DataFrame:
-    """All possible peers per distressed firm: same sub-group (else same group), not excluded."""
+                    excluded_codes: set[str], prefix_len: int = 8,
+                    isin_by_code: dict[str, str] | None = None,
+                    name_by_code: dict[str, str] | None = None) -> pd.DataFrame:
+    """All possible peers per distressed firm: same sub-group (else same group), not excluded,
+    and never another listing of the firm itself."""
     pool = []
     if len(members):
         pool.append(members[["bse_code", "isubgroup_code"]])
@@ -157,8 +228,9 @@ def peer_candidates(pilot: pd.DataFrame, members: pd.DataFrame, headers: pd.Data
         if exact.empty:
             exact = pool[pool["isubgroup_code"].str[:prefix_len] == str(d["isubgroup_code"])[:prefix_len]]
             quality = f"industry_prefix_{prefix_len}"
+        itself = other_listings(d["bse_code"], isin_by_code or {}, name_by_code or {})
         for code in exact["bse_code"]:
-            if code != d["bse_code"]:
+            if code != d["bse_code"] and code not in itself:
                 rows.append({"distressed_code": d["bse_code"], "candidate_code": code,
                              "reference_fy": d["reference_fy"], "match_quality": quality})
     return pd.DataFrame(rows)

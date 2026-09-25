@@ -97,18 +97,23 @@ kept); PDFs are saved as `raw/annual_reports/<firm_id>/FY<year>.pdf`, the layout
   filings outside the sample years and with the report's own prior-year column.
 - **Company names can tie after normalisation.** Asian Hotels (East), (North) and (West) all
   normalise to "ASIAN HOTELS"; IBBI's insolvent Asian Hotels (West) was auto-matched to Asian Hotels
-  (East). The CIN printed in the report caught it (the only mismatch among 136 insolvent firms).
+  (East). The CIN printed in the report caught it (the only mismatch among 136 insolvent firms). Ties
+  are now broken by the words in brackets; the pair was retired (West itself is not eligible).
 - **A peer can be sized on a slipped filing.** P0100's peer was chosen on FY2023 total assets of
-  ₹11.78 crore from an XBRL filing 100x too small; the company is ~₹1,178 crore.
+  ₹11.78 crore from an XBRL filing 100x too small; the company is ~₹1,178 crore. Sizing now corrects
+  a filing that is a clean power of ten from the firm's other filings; the pair was retired, and two
+  insolvent firms left unmatched by the same kind of slip (MAX ALERT, Dhruv Wellness) now have peers.
 - **The first Ind AS balance sheets have three columns** (this year, last year, and the opening
   balance sheet at 1 April two years back). 66 of the cohort's FY2017-19 reports print one; read as
   two columns, this year's figures were last year's. The opening column is now recognised and skipped.
 - **One company can be listed twice.** Future Enterprises has ordinary shares (BSE523574) and DVR
   shares (BSE570002, ISIN IN9...); the peer search picked the DVR listing as the insolvent firm's own
-  "healthy" peer (P0103). Their reports are the same documents.
+  "healthy" peer (P0103). Their reports are the same documents. DVR listings are no longer peers; the
+  pair was retired.
 - **The exchange can list a report under the wrong year.** Three reports are the previous year's
   report (Fedders Electric's "FY2019" is its 2017-18 report; Simplex Projects' "FY2020" and "FY2021"
   are its FY2019 and FY2020 reports), found by the newest "year ended 31 March" the report names.
+  Phase 2 now excludes such reports (`report_is_for_another_year`).
 
 ## Pilot results (27 pairs, 24 Sep 2026)
 
@@ -123,18 +128,18 @@ kept); PDFs are saved as `raw/annual_reports/<firm_id>/FY<year>.pdf`, the layout
 
 `python scripts/pilot_report.py --data-dir D` writes the details to `interim/qa/pilot/`.
 
-## Full cohort results (136 pairs, 25 Sep 2026)
+## Full cohort results (135 pairs, 25 Sep 2026, after the corrections)
 
 | | |
 | --- | --- |
-| Pairs | 136 (the pilot's 27 + 109 new); 39 insolvent firms found no peer within ±30% |
-| Reports read | 1,143 (147,662 pages, 7,436 OCR'd), no failures; 1,048 belong to the cohort |
-| Insolvent firms confirmed by the CIN in their own report | 135 of 136 (127 exact, 6 same registration number, 2 AP to TG); P0093 is a wrong match |
-| Leakage review | 62 reports read, 38 excluded (discuss a petition against the company itself) |
-| Company-years | 1,088: 728 from XBRL, 320 from the report, 25 from next year's report, 15 missing |
-| Report reader vs XBRL, within 1% | 92.0% of 10,246 figures (93.4% within 5%); 6 company-years detected as misread (their figures unused), 6 XBRL filings a power of ten off |
-| Unrecoverable company-years (a core figure missing) | distressed 60 of 544, healthy 41 of 544 - 80 of the 101 are FY2016-2018 |
-| Modelling rows | 729 included (367 distressed / 362 healthy); 620 keep usable financials after the pair rule |
+| Pairs | 135: the pilot's 27 + 108 new. 3 retired (wrong insolvent firm, a peer sized on a slipped filing, a peer that was the firm's own DVR listing), 2 added once slipped filings were corrected; 39 insolvent firms have no peer within ±30% |
+| Reports read | 1,154 (148,424 pages, 7,490 OCR'd), no failures; 1,042 belong to the cohort |
+| Insolvent firms confirmed by the CIN in their own report | all 135 (127 exact, 6 same registration number, 2 Andhra Pradesh to Telangana) |
+| Leakage review | 63 reports read, 38 excluded (discuss a petition against the company itself); 3 reports excluded as another year's report |
+| Company-years | 1,080: 718 from XBRL, 321 from the report, 25 from next year's report, 16 missing |
+| Report reader vs XBRL, within 1% | 91.8% of 10,081 figures (93.3% within 5%); 7 company-years detected as misread (their figures unused), 6 XBRL filings a power of ten off (not used) |
+| Unrecoverable company-years (a core figure missing) | distressed 62 of 540, healthy 40 of 540 - 80 of the 102 are FY2016-2018 |
+| Modelling rows | 719 included (362 distressed / 357 healthy); 609 keep usable financials after the pair rule |
 
 `python scripts/pilot_report.py --data-dir D --name full` writes the details to `interim/qa/full/`.
 
@@ -149,6 +154,8 @@ python scripts/exchange_pipeline.py --data-dir D full-distressed-reports --jobs-
 python scripts/exchange_pipeline.py --data-dir D full-sizing --jobs-out J              # 013: peers' size-year XBRL
 python scripts/exchange_pipeline.py --data-dir D full-shortlist --jobs-out J           # 014: report lists within +/-30%
 python scripts/exchange_pipeline.py --data-dir D full-finalize --jobs-out J            # pairs, cohort.csv; 015: peers' reports
+python scripts/exchange_pipeline.py --data-dir D parse                                 # re-match IBBI (bracket tie-break)
+python scripts/exchange_pipeline.py --data-dir D full-amend --jobs-out J               # corrections; 020 lists, 021 reports
 python scripts/pilot_report.py --data-dir D --name full                                # after text, xbrl, phases, cincheck
 ```
 

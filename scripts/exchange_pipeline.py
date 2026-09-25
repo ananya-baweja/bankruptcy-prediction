@@ -34,7 +34,8 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from bpp.cohort.cin_match import match_debtors  # noqa: E402
 from bpp.cohort.peers import build_sample_frame  # noqa: E402
-from bpp.cohort.pilot import choose_peers, distressed_eligibility, peer_candidates, sample_pilot  # noqa: E402
+from bpp.cohort.pilot import (choose_peers, correct_unit_slips, distressed_eligibility,  # noqa: E402
+                              other_listings, peer_candidates, sample_pilot)
 from bpp.common import doc_id_for  # noqa: E402
 from bpp.scrape.listed import build_universe, parse_bse_scrips, parse_nse_equity_list  # noqa: E402
 from bpp.sources import jobs as J  # noqa: E402
@@ -69,6 +70,26 @@ def load_tables(D: Path) -> dict[str, pd.DataFrame]:
     t["xbrl_index"] = annual_standalone_xbrl(t["archive"]) if len(t["archive"]) else pd.DataFrame(
         columns=["bse_code", "fy", "xbrl_url", "filed_at", "revised_at"])
     return t
+
+
+def sizing_assets(D: Path) -> dict[tuple[str, int], float]:
+    """Total assets for sizing: every collected XBRL filing, slipped filings corrected (25 Sep 2026)."""
+    assets, _ = xbrl_assets(D)
+    fixed, slips = correct_unit_slips(assets)
+    if len(slips):
+        (D / "interim").mkdir(parents=True, exist_ok=True)
+        slips.to_csv(D / "interim/xbrl_unit_corrections.csv", index=False)
+        log.info("%d XBRL filings a power of ten off the firm's other years: corrected for sizing", len(slips))
+    return fixed
+
+
+def _universe_maps(D: Path) -> tuple[dict[str, str], dict[str, str], dict[str, str]]:
+    """bse_code -> ISIN, normalised name, company name."""
+    uni = pd.read_csv(D / "interim/listed_universe.csv", dtype={"bse_code": "string", "isin": "string"})
+    uni = uni[uni["bse_code"].notna()]
+    codes = code_str(uni["bse_code"])
+    return (dict(zip(codes, uni["isin"])), dict(zip(codes, uni["name_norm"])),
+            dict(zip(codes, uni["company_name"])))
 
 
 def xbrl_assets(D: Path) -> tuple[dict[tuple[str, int], float], pd.DataFrame]:
@@ -326,7 +347,9 @@ def step_full_candidates(D: Path, cfg: dict, jobs_out: Path) -> None:
     new = _full_new(D)
     excluded = set(code_str(m.loc[m["match_status"].isin(["auto_accepted", "needs_review"]), "bse_code"].dropna()))
     excluded |= set(_pilot_pairs(D)["peer_code"])               # a pilot peer is already used
-    cands = peer_candidates(new, t["members"], t["headers"], excluded, prefix_len=8)
+    isin_by, norm_by, _ = _universe_maps(D)
+    cands = peer_candidates(new, t["members"], t["headers"], excluded, prefix_len=8,
+                            isin_by_code=isin_by, name_by_code=norm_by)
     cands.to_csv(D / "interim/full_peer_candidates.csv", index=False)
     have = set(t["archive"]["bse_code"]) if len(t["archive"]) else set()
     items = _new_items(D, [J.bse_result_archive(c) for c in sorted(set(cands["candidate_code"]) - have)])
@@ -411,7 +434,7 @@ def _in_tolerance(new: pd.DataFrame, cands: pd.DataFrame, assets: dict, tol: flo
 
 def step_full_shortlist(D: Path, cfg: dict, jobs_out: Path) -> None:
     t = load_tables(D)
-    assets, _ = xbrl_assets(D)
+    assets = sizing_assets(D)
     new = _full_new(D)
     cands = pd.read_csv(D / "interim/full_peer_candidates.csv", dtype={"distressed_code": "string", "candidate_code": "string"})
     short = _in_tolerance(new, cands, assets, cfg["cohort"]["asset_tolerance"])
@@ -427,7 +450,7 @@ def step_full_shortlist(D: Path, cfg: dict, jobs_out: Path) -> None:
 
 def step_full_finalize(D: Path, cfg: dict, jobs_out: Path) -> None:
     t = load_tables(D)
-    assets, _ = xbrl_assets(D)
+    assets = sizing_assets(D)
     new = _full_new(D)
     cands = pd.read_csv(D / "interim/full_peer_candidates.csv", dtype={"distressed_code": "string", "candidate_code": "string"})
     rep = t["reports"]
@@ -505,6 +528,165 @@ def step_full_finalize(D: Path, cfg: dict, jobs_out: Path) -> None:
              len(uniq), sum(1 for i in uniq if i.get("expect") == "pdf"), len(missing), path)
 
 
+# ------------------------------------------------------------------ corrections to the full cohort (25 Sep 2026)
+def _report_items(t: dict, frame: pd.DataFrame, firms: set[str]) -> tuple[list[dict], list[tuple[str, int]]]:
+    """Report PDF and XBRL download items for the sample-frame years of ``firms``."""
+    rep = t["reports"]
+    have_rep = rep.set_index(["bse_code", "fy"]).sort_index() if len(rep) else None
+    xb = t["xbrl_index"].dropna(subset=["xbrl_url"]).set_index(["bse_code", "fy"]).sort_index()
+    items, missing = [], []
+    for _, r in frame[frame["firm_id"].isin(firms)].iterrows():
+        code, fy = r["firm_id"].replace("BSE", ""), int(r["fy"])
+        if have_rep is not None and (code, fy) in have_rep.index:
+            url = have_rep.loc[(code, fy)]
+            url = url.iloc[0]["url"] if isinstance(url, pd.DataFrame) else url["url"]
+            items.append(J.report_pdf(r["firm_id"], fy, url))
+        else:
+            missing.append((r["firm_id"], fy))
+        if (code, fy) in xb.index:
+            hit = xb.loc[(code, fy), "xbrl_url"]
+            items.append(J.xbrl_file(r["firm_id"], fy, hit.iloc[0] if isinstance(hit, pd.Series) else hit))
+    return items, missing
+
+
+def step_full_amend(D: Path, cfg: dict, jobs_out: Path) -> None:
+    """Correct the full cohort in place; every surviving pair keeps its id.
+
+    A pair is retired when its insolvent firm no longer matches an IBBI debtor (name
+    ties are now broken by the words in brackets), when that firm's reports print
+    another company's CIN, when its peer is another listing of the same company (a
+    DVR share class), or when the size match fails once XBRL filings a power of ten
+    off are corrected. Every eligible insolvent firm left without a pair is then
+    matched again under the unchanged rules, against candidates no kept pair uses, and
+    new pairs are numbered after the last pair id.
+
+    Run it until it stops asking for data: missing annual-report lists (to judge
+    eligibility and the three-report rule) are written as job 020; the new pairs'
+    reports and XBRL as job 021.
+    """
+    t = load_tables(D)
+    assets = sizing_assets(D)
+    isin_by, norm_by, name_by = _universe_maps(D)
+    m = pd.read_csv(D / "interim/ibbi_listed_matches.csv", dtype={"bse_code": "string"})
+    m["bse_code"] = code_str(m["bse_code"])
+    accepted = m[(m["match_status"] == "auto_accepted") & m["bse_code"].notna() & (m["bse_code"] != "<NA>")]
+    have_lists = set(t["reports"]["bse_code"]) if len(t["reports"]) else set()
+    # a list already fetched counts even when it lists no report
+    have_lists |= _collected(D, "raw/annual_reports/_listings/bse_annual_reports.jsonl")
+
+    # 1. an insolvent firm with no annual-report list yet cannot be judged: fetch it first
+    need = sorted(set(accepted["bse_code"]) - have_lists)
+    elig = distressed_eligibility(m, t["headers"], t["xbrl_index"], t["reports"], cfg)
+    elig.to_csv(D / "interim/distressed_eligibility.csv", index=False)
+    cohort = pd.read_csv(D / "processed/cohort.csv", dtype={"firm_id": "string"})
+    cin = pd.read_csv(D / "interim/report_cin_check.csv", dtype=str) if (D / "interim/report_cin_check.csv").exists() \
+        else pd.DataFrame(columns=["firm_id", "report_cin_check"])
+    cin_status = dict(zip(cin["firm_id"], cin["report_cin_check"]))
+    tol = cfg["cohort"]["asset_tolerance"]
+
+    # 2. which pairs stand
+    retired = []
+    for pid, g in cohort.groupby("pair_id", sort=True):
+        d = g[g["role"] == "distressed"].iloc[0]
+        h = g[g["role"] == "healthy"].iloc[0]
+        dc, hc, size_fy = str(d["firm_id"])[3:], str(h["firm_id"])[3:], int(d["size_fy"])
+        why = []
+        if dc not in set(accepted["bse_code"]):
+            why.append("the IBBI debtor is another listed company (name tie)")
+        if cin_status.get(str(d["firm_id"])) == "mismatch":
+            why.append("its own reports print another company's CIN")
+        if hc in other_listings(dc, isin_by, norm_by):
+            why.append("the peer is another listing of the insolvent firm itself")
+        a_d, a_h = assets.get((dc, size_fy)), assets.get((hc, size_fy))
+        if a_d and a_h and not (1 - tol) <= a_h / a_d <= (1 + tol):
+            why.append(f"size match fails once slipped XBRL is corrected (peer {a_h:,.2f} cr vs {a_d:,.2f} cr)")
+        if why:
+            retired.append({"pair_id": pid, "distressed": d["firm_id"], "distressed_name": d["company_name"],
+                            "peer": h["firm_id"], "peer_name": h["company_name"], "reason": "; ".join(why)})
+    retired_ids = {r["pair_id"] for r in retired}
+    kept = cohort[~cohort["pair_id"].isin(retired_ids)]
+
+    # 3. every eligible insolvent firm without a pair, against candidates nobody uses
+    paired = set(kept.loc[kept["role"] == "distressed", "firm_id"].str[3:])
+    used = set(kept.loc[kept["role"] == "healthy", "firm_id"].str[3:])
+    pool = elig[elig["eligible"] & ~elig["bse_code"].isin(paired)].copy()
+    pool = pool[pool["size_fy"].notna()]
+    excluded = set(code_str(m.loc[m["match_status"].isin(["auto_accepted", "needs_review"]), "bse_code"].dropna()))
+    cands = peer_candidates(pool, t["members"], t["headers"], excluded | used, prefix_len=8,
+                            isin_by_code=isin_by, name_by_code=norm_by)
+    short = _in_tolerance(pool, cands, assets, tol) if len(cands) else pd.DataFrame(columns=["candidate_code"])
+    need += sorted(set(short["candidate_code"]) - have_lists)
+    need = sorted(set(need))
+    if retired:     # a later run with nothing to retire keeps the record of the earlier one
+        pd.DataFrame(retired).to_csv(D / "interim/amend_retired_pairs.csv", index=False)
+    if need:
+        items = _new_items(D, [J.bse_annual_reports(c) for c in need])
+        path = J.write_jobs(jobs_out, "020_amend_report_lists", items,
+                            "Cohort corrections: annual-report lists of insolvent firms and possible peers not "
+                            "listed yet (eligibility and the three-report rule need them).", delay_s=0.5)
+        log.info("retired pairs: %s; %d report lists missing - wrote %s; run the job, then full-amend again",
+                 sorted(retired_ids), len(items), path)
+        return
+
+    rep = t["reports"]
+    n_cand = cfg["cohort"]["n_candidate_years"]
+    counts = {}
+    for _, d in pool.iterrows():
+        ref = int(d["reference_fy"])
+        yrs = set(range(ref - n_cand + 1, ref + 1))
+        for code in cands.loc[cands["distressed_code"] == d["bse_code"], "candidate_code"]:
+            counts[(code, ref)] = int(rep[(rep["bse_code"] == code) & rep["fy"].isin(yrs)]["fy"].nunique())
+    pairs, unmatched = choose_peers(pool, cands, assets, counts, cfg, cfg["cohort"]["random_seed"])
+    if len(pairs):
+        pairs = pairs.merge(pool[["bse_code", "admission_date", "admission_year"]].rename(
+            columns={"bse_code": "distressed_code"}), on="distressed_code", how="left")
+        pairs = pairs.sort_values(["admission_year", "distressed_code"]).reset_index(drop=True)
+    if len(pairs):
+        pairs.to_csv(D / "interim/amend_pairs.csv", index=False)
+    unmatched.to_csv(D / "interim/amend_unmatched.csv", index=False)
+
+    start = int(cohort["pair_id"].str[1:].astype(int).max()) + 1
+    hdr = t["headers"].set_index("bse_code")
+    nd = pool.set_index("bse_code")
+    rows = []
+    for i, p in pairs.iterrows():
+        pid = f"P{start + i:04d}"
+        d = nd.loc[p["distressed_code"]]
+        for role, code, assets_v in (("distressed", p["distressed_code"], p["distressed_assets"]),
+                                     ("healthy", p["peer_code"], p["peer_assets"])):
+            rows.append({
+                "pair_id": pid, "firm_id": f"BSE{code}", "company_name": name_by.get(code),
+                "role": role, "label": 1 if role == "distressed" else 0,
+                "reference_date": d["admission_date"],
+                "admission_date_source": "ibbi_pa_date" if role == "distressed" else None,
+                "petition_date": None, "reference_fy": int(p["reference_fy"]),
+                "industry_code": hdr["isubgroup_code"].get(code) if code in hdr.index else d["isubgroup_code"],
+                "total_assets_ref_fy": round(float(assets_v), 2),
+                "asset_ratio_to_distressed": 1.0 if role == "distressed" else p["asset_ratio"],
+                "match_quality": p["match_quality"], "business_group": None,
+                "cin": d["cin"] if role == "distressed" else None,
+                "size_fy": int(p["size_fy"]),
+            })
+    if not (D / "processed/cohort_before_amend.csv").exists():
+        cohort.to_csv(D / "processed/cohort_before_amend.csv", index=False)
+    new_cohort = pd.concat([kept, pd.DataFrame(rows)], ignore_index=True)
+    new_cohort.to_csv(D / "processed/cohort.csv", index=False)
+    frame = build_sample_frame(new_cohort, cfg)
+    frame.to_csv(D / "processed/sample_frame.csv", index=False)
+    log.info("retired %d pairs %s; %d new pairs %s; %d insolvent firms still unmatched; cohort now %d pairs",
+             len(retired_ids), sorted(retired_ids), len(pairs),
+             [f"P{start + i:04d}" for i in range(len(pairs))], len(unmatched), new_cohort["pair_id"].nunique())
+
+    new_firms = {f"BSE{c}" for c in set(pairs.get("distressed_code", [])) | set(pairs.get("peer_code", []))}
+    items, missing = _report_items(t, frame, new_firms)
+    uniq = _new_items(D, list({(i.get("path") or i["key"]): i for i in items}.values()))
+    path = J.write_jobs(jobs_out, "021_amend_reports", uniq,
+                        "Cohort corrections: annual-report PDFs and standalone XBRL of the new pairs' years.",
+                        delay_s=1.0, per_job=120)
+    log.info("report job: %d items (%d PDFs); no report listed for %d firm-years; wrote %s",
+             len(uniq), sum(1 for i in uniq if i.get("expect") == "pdf"), len(missing), path)
+
+
 def step_xbrl(D: Path) -> None:
     _, rows = xbrl_assets(D)
     out = D / "interim/xbrl_financials_exchange.csv"
@@ -546,7 +728,7 @@ def main() -> None:
     ap.add_argument("--data-dir", required=True, type=Path)
     ap.add_argument("step", choices=["parse", "select", "candidates", "peers", "finalize", "xbrl", "manifest",
                                      "full-select", "full-candidates", "full-sizing", "full-shortlist",
-                                     "full-finalize", "full-distressed-reports"])
+                                     "full-finalize", "full-distressed-reports", "full-amend"])
     ap.add_argument("--n", type=int, default=40)
     ap.add_argument("--n-pairs", type=int, default=30)
     ap.add_argument("--years", default="2019-2025")
@@ -572,7 +754,7 @@ def main() -> None:
     else:
         {"full-select": step_full_select, "full-candidates": step_full_candidates,
          "full-sizing": step_full_sizing, "full-shortlist": step_full_shortlist,
-         "full-finalize": step_full_finalize,
+         "full-finalize": step_full_finalize, "full-amend": step_full_amend,
          "full-distressed-reports": step_full_distressed_reports}[a.step](a.data_dir, cfg, a.jobs_out)
 
 

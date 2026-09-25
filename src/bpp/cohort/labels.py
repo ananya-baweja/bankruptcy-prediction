@@ -2,6 +2,8 @@
 
 This is where most data leakage is prevented, so the rules are explicit:
 
+0. The right report. A report whose own text is about another fiscal year (the
+   exchange listed it under the wrong year) is excluded as ``report_is_for_another_year``.
 1. Publication date. Use the real date the report was filed (from the NSE/BSE
    listing or the manual CSV). If unknown, assume FY end + ~6 months and flag it
    (``pub_date_source = assumed``).
@@ -46,6 +48,7 @@ def _section_summary(paths: Paths, doc_id: str) -> dict[str, Any]:
         return {"sections_extracted": False}
     js = json.loads(f.read_text(encoding="utf-8"))
     out = {"sections_extracted": True,
+           "report_year_mismatch": (js.get("year_check") or {}).get("mismatch", ""),
            "audit_opinion": js.get("audit_opinion"),
            "cirp_specific_mentions": js.get("leakage", {}).get("cirp_specific_mentions", 0),
            "ibc_generic_mentions": js.get("leakage", {}).get("ibc_generic_mentions", 0)}
@@ -85,6 +88,9 @@ def assign_labels(frame: pd.DataFrame, documents: pd.DataFrame, cohort: pd.DataF
 
     reasons = pd.Series("", index=df.index)
     reasons[~df["has_document"]] = "missing_document"
+    # the exchange listed another year's report under this year: as good as missing
+    wrong_year = df["doc_id"].map(lambda d: bool(section_info.get(d, {}).get("report_year_mismatch")))
+    reasons[wrong_year & (reasons == "")] = "report_is_for_another_year"
     too_close = df["has_document"] & (df["days_before_reference"] < excl_days)
     reasons[too_close & (reasons == "")] = f"published_within_{excl_days}d_of_admission"
     after_pet = df["has_document"] & df["petition_date"].notna() & (df["pub_date"] >= df["petition_date"])
