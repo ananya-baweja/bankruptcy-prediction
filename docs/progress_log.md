@@ -2,6 +2,248 @@
 
 What was done each working session, newest first. Keep entries short: what, result, next.
 
+## 2026-09-25 — Cohort corrections applied; dataset complete for modelling
+
+**Decided (Gaurav):** "do whatever is correct" on the five recommendations below.
+
+**Done**
+- **Phase 1** (`exchange_pipeline.py parse` + `full-amend`; pairs keep their ids): name ties broken by
+  the words in brackets (only Asian Hotels (West) changed among 740 IBBI debtors); DVR / partly
+  paid-up listings (`IN9` ISIN) and same-name listings are never peers; sizing corrects XBRL filings a
+  clean power of ten off the firm's majority scale (40 filings). Retired P0093 (wrong firm - Asian
+  Hotels (West) itself is not eligible: 2 reports before admission), P0100 (peer sized on a filing 100x
+  too small), P0103 (peer was the firm's own DVR listing); added P0137 MAX ALERT + Shiva Granito and
+  P0138 Dhruv Wellness + Worldwide Aluminium. 8 report lists and 8 reports downloaded, 11 read.
+- **Phase 2:** a report whose own text is about another year is excluded (`report_is_for_another_year`):
+  3 reports (Fedders Electric FY2019; Simplex Projects FY2020 and FY2021). Leakage review: MAX ALERT
+  FY2020 kept (statutory "no CIRP initiated" statement).
+- **Phase 3:** an XBRL filing a clean power of ten off the firm's other filings is not used even when
+  the report has no figure to compare (Dhruv Wellness FY2023: ₹6.2 lakh crore).
+- **Result:** 135 pairs, 1,080 company-years, 719 modelling rows (362/357), 609 with usable financials.
+  Reader vs XBRL within 1%: 91.8% of 10,081 figures. **Unrecoverable company-years: distressed 62 of
+  540, healthy 40 of 540** (80 of them FY2016-18). All 135 insolvent firms confirmed by their own CIN.
+  No company-year is now a power of ten off its neighbours except two genuine changes. 5 new tests.
+
+**Next:** a person to fill in the spot-check sheet (`interim/qa/financials_spot_check.csv`, 108
+company-years); promoter pledge % (exchange shareholding filings) is the one planned feature not yet
+collected; then modelling.
+
+## 2026-09-24/25 — Full cohort processed: 136 pairs, 1,048 reports, Phases 2–4
+
+**Done**
+- **Pairs:** 109 new + the pilot's 27 = 136, all in the same BSE sub-group within ±30% total assets
+  (39 insolvent firms found no peer; `interim/full_unmatched.csv`). All downloads finished: the
+  cohort's reports and every candidate peer's size-year XBRL (6,921 filings, 540 MB of JSON).
+- **Text:** 1,143 reports, 147,662 pages (7,436 OCR'd), no failures. OCR is capped at 5,000 px per page.
+- **Leakage review:** 55 more flagged reports read; 35 excluded under the pilot rule (38 of 62 in all).
+- **Phase 3 fixes** after the first run (66 company-years read a power of ten off the XBRL):
+  unit captions below the signatures, in the heading line, on another statement, in the
+  accounting-policy note or in a shifted font; "hundreds" and `'000`; a boilerplate lakh caption over
+  rupees; a bare "Rs." header over lakhs. **Three-column Ind AS transition balance sheets** (66
+  reports) were read one column off; the opening column is now skipped. A directors'-report line is
+  no longer taken for the balance sheet. Unit arbitration uses all of a firm's filings. 19 regression
+  tests. The report CIN check reads the whole report.
+- **Result:** reader vs XBRL within 1% **92.0%** of 10,246 figures (was 80.0%); 729 modelling rows
+  (367/362), 620 with usable financials after the pair rule. **Unrecoverable company-years:
+  distressed 60 of 544, healthy 41 of 544**, 80 of them FY2016–2018. 135 of 136 insolvent firms
+  confirmed by their own CIN.
+
+**Found, for the team to decide (Phase 1–2 inputs, not changed)** - resolved 25 Sep, see above
+- P0093: IBBI's insolvent company is Asian Hotels (West) (BSE533221); the name match picked Asian
+  Hotels (East) (BSE533227), which is not insolvent. Re-match (peers within ±30% exist: Oriental
+  Hotels, HLV) or drop the pair.
+- P0100: the peer Rane (Madras) was sized on an XBRL filing 100x too small (₹11.78 crore; really
+  ~₹1,178 crore). No other candidate within ±30%: drop the pair.
+- P0103: the "healthy" peer is the insolvent firm itself - Future Enterprises' DVR share listing
+  (BSE570002). No other candidate within ±30%: drop the pair.
+- MAX ALERT and Dhruv Wellness found no peer because their size-year XBRL is unit-slipped (22.8 lakh
+  crore and 6.2 lakh crore); re-sizing them from their reports could add up to 2 pairs.
+- Simplex Projects (P0090): the exchange's "FY2020" and "FY2021" reports are its FY2019 and FY2020
+  reports (the real FY2021 report is not on the exchange). Treat those two years as missing?
+
+**Next:** the team's answers; the spot-check sheet (`interim/qa/financials_spot_check.csv`,
+109 company-years) needs a person; then modelling.
+
+## 2026-09-24 — Decisions taken; Phase 2 CARO/opinion fix; full cohort started
+
+**Decided (Gaurav):** keep the exclusions (financial sector, government companies, BSE group A);
+exclude the 3 reports that discuss the company's own insolvency petition; fix Phase 2's CARO and
+audit-opinion detection; go ahead with the full cohort.
+
+**Done**
+- Phase 2 fix (`extract/sections.py`): the text under an auditor's annexure decides whether it is CARO
+  or internal financial controls, whatever its letter; long and bracketed annexure headings; opinion
+  read from messy headings or, failing that, from the opinion paragraph's wording. CARO found in
+  **185 of 210** reports (was 144, several of them the wrong annexure); opinion unidentified in 15
+  (was 39). 3 regression tests.
+- Leakage decisions now live in `data/manual/leakage_review.csv` and are applied by the labels step.
+- Pilot re-run: 154 modelling rows. The CARO default flag now separates the classes (insolvent firm
+  higher in 22 pairs, lower in 5; 47% vs 19% of reports).
+- Full cohort pipeline (`exchange_pipeline.py full-*`): 175 eligible insolvent firms, the pilot's 27
+  pairs kept. Collected data now lands in per-job part files so no file outgrows a transfer.
+  Downloads running: the industry list for all 4,881 active companies, then the insolvent firms' XBRL.
+
+**Next:** candidates → their filing lists and size-year XBRL → shortlist within ±30% → their report
+lists → pairs → ~1,200 reports → Phases 2–4 on the full cohort.
+
+## 2026-09-23/24 — Real data: download agent, 27-pair pilot, Phases 2–4 on 210 real reports
+
+**Done**
+- **Data without CMIE.** A small download agent (`bpp_fetch.py`, standard library only) runs on a team
+  laptop in India and fetches what job files list: IBBI's CIRP export (with CINs), the BSE/NSE listed
+  universe, BSE industry codes, annual-report PDFs and the standalone annual XBRL results. Every request
+  is logged with its SHA-256. Agent 1.4 keeps a file only when complete; 1.5 can split a file too large
+  to hand over (one report was 229 MB). See `docs/08_real_data.md`.
+- **Cohort from exchange data** (`scripts/exchange_pipeline.py`): 455 insolvent companies matched to a
+  listing by CIN; 175 eligible under the pilot rules; a 27-pair pilot sampled across admission years
+  2019–2025, peers from the same BSE sub-group within ±30% total assets. **All 27 insolvent firms are
+  confirmed by the CIN printed in their own reports** (26 exact, 1 via the registration number).
+- **All 210 pilot reports read** (pypdfium2 + Tesseract): 23,636 pages, 1,624 of them OCR'd, no failures.
+- **Phase 3 on real reports — what failed, and the fixes** (each has a regression test in
+  `tests/test_financials_real_reports.py`, 31 tests):
+  - statements in rupees with no caption read as crore (10^7 too large); a directors'-report P&L summary
+    taken for the P&L; cash-flow movements read as balances; bracketed expenses negative; pre-exceptional
+    PBT; a note number read as a figure; figures printed on the line after the label; unlabelled or bare
+    `Total` section totals; pre-Ind AS sheets with no section totals (now summed, kept only if the sheet
+    balances to rounding); "Other current liabilities" fuzzy-matched to the total; opening cash taken as
+    closing cash; the auditor's report and contents pages taken for the balance sheet; OCR slips (lost
+    `(`, spaced commas).
+  - XBRL is not always right either: 2 filings in the wrong unit, 2 that repeat last year's P&L, 1 with a
+    mistyped balance-sheet tag. Handled by evidence-based unit checks, a stale-copy rule and a
+    balance-sheet-identity arbitration; 6 reports read at the wrong scale are detected the same way.
+- **Result:** the PDF reader agrees with the XBRL filing within 1% on **87.9%** of 1,934 figures where both
+  exist (91.2% excluding the reports detected as read at the wrong scale). Unrecoverable
+  company-years (a core field missing after every source): **distressed 10 of 108, healthy 9 of 108**,
+  almost all FY2016–2018. Of the 160 modelling rows, 135 keep usable financials after the pair rule.
+- **Phase 4 on real reports:** tone for 201 of 210 reports (LM Master Dictionary 1993–2025), readability,
+  auditor flags, drift. Leakage review of the 7 flagged reports done (`interim/qa/leakage_review.csv`):
+  3 recommended for exclusion, not applied.
+- **Pilot signal check** (same pair, same horizon, modelling rows only; descriptive): the ratios separate
+  strongly (current ratio lower for the insolvent firm in 53 of 61 pairs, Altman Z'' in 44 of 51); language modestly
+  (MD&A hedging higher in 47 of 71, auditor's-report negative tone in 48 of 74, MD&A negative tone in 44 of 71;
+  going concern 6 pairs to 0). Drift shows nothing yet. `interim/qa/pilot/signal_check.csv`.
+
+**Not done / needs the team**
+- Confirm the provisional exclusions (financial sector, government companies, BSE group A).
+- Leakage: exclude the 3 reports that discuss the company's own insolvency petition?
+- **Phase 2 change request:** the CARO annexure is missed in 66 of 210 reports and the audit opinion in
+  35; fixing it means changing Phase 2 code.
+- Approve the full-cohort downloads (an estimated ~1,400 reports, ~9–10 GB, plus ~4,900 small industry
+  lookups). 13 pilot firms found no peer among the ≤30 traded members of their sub-group; the full
+  industry list would fix that.
+- Fill the financials spot-check sheet (`interim/qa/financials_spot_check.csv`, 22 company-years).
+
+**Next**
+1. Team decisions above, then the full cohort.
+2. Phase 2 CARO/opinion fix once approved; re-run Phase 4.
+3. Stream A (FinBERT) and the models, on Colab.
+
+## 2026-09-23 — Phase 4 stream B built (language features, `bpp language-features`)
+
+**Done**
+- `bpp language-features`, plus `src/bpp/nlp/{lexicon,readability,lm,drift,features}.py` and
+  `docs/07_phase4_language.md`.
+- Tone (Loughran-McDonald, seven categories), hedging density, an India/IBC distress phrase **seed**
+  list, Gunning Fog readability and length — computed for the **MD&A and the auditor's report
+  separately**, so the Phase 7 "MD&A only vs auditor only vs both" ablation is possible.
+- Auditor flags read from Phase 2's sections: going concern, emphasis of matter, opinion severity as
+  an ordinal, and the two CARO clauses that matter (loan default, unpaid statutory dues).
+- Perplexity under an interpolated **Kneser-Ney** model trained on healthy-firm MD&A, written here
+  because nltk is not a dependency. Left empty unless a training set is named, so the reference model
+  cannot be fitted across folds.
+- Year-on-year **drift** (contribution A): Jaccard, cosine, new-word share, and deltas in tone,
+  hedging and readability, always against the same firm's previous year.
+- `CORE_LANGUAGE_FEATURES` names the 25 values the model takes, matching Table 7; the table carries
+  more for the ablations. **The model code should read that list, not hard-code 25.**
+
+**Checked on synthetic data (not real results)**
+- 111 new tests pass. The whole suite is 314 passing.
+- An adversarial review was run again after the tests first came back green, and found 16 more
+  defects — the same lesson as Phase 3, that a green suite on clean fixtures proves very little.
+  The ones worth knowing:
+  - **Both CARO flags were 1.0 for every company.** A clean annexure says "has **not** defaulted",
+    "**Neither** the Company **nor** its promoters ... wilful defaulter" and "there are **no**
+    undisputed statutory dues outstanding"; some auditors also reproduce the Order's own wording,
+    "**whether** the company has defaulted ... if yes". Now judged clause by clause.
+  - **Fog was ~38 for any section of headings and bullets** — which is most PDF-extracted MD&A —
+    because the splitter needed a full stop and returned one sentence for the whole section.
+  - "going concern" in the distress seed list made `auditor_distress_phrase_density` constant: SA 570
+    puts it in every clean auditor's report.
+  - Drift was keyed on `(firm, fy)` while rows are per `doc_id`, so two documents in one firm-year
+    swapped drift; and a fiscal year stored as a string silently disabled drift for every row.
+  - Perplexity used raw counts at the lower orders, making it absolute discounting with a
+    Kneser-Ney unigram rather than Kneser-Ney, and an `order: 1` config gave every document the
+    same score.
+  - Hyphenated compounds ("non-performing") could never match the dictionary.
+  All fixed, each with a regression test in `tests/test_language_robustness.py`.
+
+**Not verified yet (needs real reports)**
+- Nothing here has met a real annual report, for the same reason as Phase 3.
+- The Loughran-McDonald dictionary has not been downloaded, so tone has only been exercised against
+  a small hand-written list. Someone must fetch it from sraf.nd.edu into `data/manual/`.
+- The distress phrase list is a **seed**, not contribution C's mined lexicon.
+
+**Next**
+1. Download the LM dictionary; note its version in `decisions_log.md`.
+2. After the first real batch: group every flag by `label` and confirm the classes differ. A
+   constant feature is the failure mode of this phase.
+3. Stream A (FinBERT), NER masking, coreference, SVO triplets and the mined lexicon — all Colab.
+
+## 2026-09-23 — Phase 3 built (financial features, `bpp financials`)
+
+**Done**
+- `bpp financials` and `bpp financials-score`, plus `src/bpp/features/{numbers,statements,ratios,financials}.py`
+  and `docs/06_phase3_financials.md`.
+- Locates the **standalone** balance sheet, P&L and cash flow statement in Phase 2's page text (no
+  re-OCR), reads the unit and period columns from the header, walks the lines tracking Schedule III
+  sub-headings, and maps line items to 20 standard fields. Ruled tables go through pdfplumber or
+  camelot when available; the text walk always runs, so scanned statements still work.
+- Both the current-year and prior-year columns are read. Figures are stored **as first published**;
+  the next year's comparative cross-checks them (`restated`) or fills a missing year.
+- Validation: both balance-sheet identities, subtotal containment, unit-scale checks against the
+  cohort's own assets and against last year, and a confidence score per figure.
+- The 12 stream-C ratios of Table 7, including Altman EM Z'' with its zones. Ratios with a negative
+  or zero denominator return empty with a reason, and the condition is kept as its own feature.
+- Missing-data flag per company-year (rows kept, never dropped), the gap-filling order, the
+  pair-exclusion rule, and the unrecoverable count **by class** printed every run.
+- Spot-check sheet: a random 10% of company-years with page numbers, scored by `bpp financials-score`.
+- `synthetic.py` gained `financial_statements=False` (off by default, so Phases 1–2 are unchanged),
+  which writes proper Schedule III statements with a prior-year column, a stated unit, bracketed
+  negatives, a note column and a consolidated set to discriminate against.
+
+**Checked on synthetic data (not real results)**
+- 173 new tests pass, covering: units (crore / lakh / million / thousand / rupee all normalising to
+  the same ₹ crore figure), Indian and Western digit grouping, bracketed negatives, Nil/NA/em-dash,
+  OCR damage, refusal on unrecoverable cells, standalone-vs-consolidated preference, `Borrowings`
+  disambiguated by sub-heading, both year columns, as-first-published, restatement detection,
+  gap-filling from a comparative and from the XBRL CSV, unrecoverable years, pair exclusion, the
+  spot-check sheet, and every ratio hand-computed.
+- The extracted balance sheet balances exactly on the synthetic reports, and the table path
+  (pdfplumber) and the text path agree figure for figure.
+- An adversarial code review was run over the module and found eleven ways a figure could come out
+  wrong but plausible, all of which the first round of tests had missed because the fixtures were
+  too clean. All are fixed and each has a regression test in `tests/test_financials_robustness.py`.
+  The ones worth knowing about: a blank money column let a note reference become this year's figure;
+  a unit word in prose ("turnover crossed Rs. 500 crore") overrode the real "(Rs. in lakhs)" caption
+  and made every figure 100x too large; the auditor's report quotes the balance sheet's title and
+  was winning the statement's location; a merged table cell "500 400" silently became 500400; and
+  the Altman safe/grey/distress cutoffs were being read against the +3.25 rating-equivalent scale
+  rather than the discriminant, which called a failing firm "safe".
+
+**Not verified yet (needs real reports)**
+- **Step 9 of the brief — the run on 5 real reports (2 insolvent, 3 healthy) has not happened**,
+  because Phase 2 has not yet been run on real PDFs. Nothing here has met a real annual report. The
+  line-item patterns and the statement-page locator are the parts most likely to need work; expect
+  to add patterns to `FIELD_PATTERNS` after the first real batch.
+- Whether `retained_earnings` appears on the face of the balance sheet often enough, or whether
+  `other_equity` will stand in for nearly every firm.
+
+**Next**
+1. Run Phase 2 on real reports, then `bpp financials` on 5 of them (2 insolvent, 3 healthy) and
+   record what failed here before scaling up.
+2. Fill the spot-check sheet and record the accuracy per field.
+3. Promoter pledge % from the exchange shareholding filings — the column is reserved and empty.
+
 ## 2026-09-21 — Progress report for the professor
 
 **Done**

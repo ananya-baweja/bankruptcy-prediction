@@ -17,6 +17,13 @@ Phase 2 - documents
     qa-sample          sheet for hand-checking section extraction
     qa-score           accuracy from the filled sheet
 
+Phase 3 - financial features
+    financials         statements -> standard fields -> validation -> 12 ratios
+    financials-score   accuracy from the filled spot-check sheet
+
+Phase 4 - language features (stream B; FinBERT/stream A runs on Colab)
+    language-features  tone, hedging, readability, auditor flags, drift, perplexity
+
 Other
     init               create data folders and manual-input templates
     demo               run Phases 1-2 end to end on synthetic data (offline)
@@ -53,6 +60,13 @@ def cmd_init(cfg, paths: Paths, args) -> None:
             "BSE500000,2019,data/raw/annual_reports/BSE500000/FY2019.pdf,2019-08-30,https://...,from company website\n",
         "listed_companies_extra_TEMPLATE.csv":
             "company_name,bse_code,nse_symbol,isin,status,industry\n",
+        "loughran_mcdonald_TEMPLATE.csv":
+            "word,category\n"
+            "# replace this file with the real Master Dictionary from sraf.nd.edu\n"
+            "loss,negative\nmay,weak_modal\nuncertain,uncertainty\n",
+        "xbrl_financials_TEMPLATE.csv":
+            "firm_id,fy,field,value_cr,source_url,note\n"
+            "BSE500000,2019,total_assets,1523.4,https://www.nseindia.com/...,XBRL annual results\n",
     }
     for name, content in templates.items():
         f = paths.manual / name
@@ -138,6 +152,22 @@ def cmd_qa_score(cfg, paths, args) -> None:
     print(score_qa_sheet(paths).to_string(index=False))
 
 
+def cmd_financials(cfg, paths, args) -> None:
+    from bpp.features.financials import run_financials
+    run_financials(cfg, paths, args.doc_id, spot_check=not args.no_spot_check,
+                   overwrite_spot_check=args.overwrite_spot_check)
+
+
+def cmd_financials_score(cfg, paths, args) -> None:
+    from bpp.features.financials import score_spot_check
+    print(score_spot_check(paths).to_string(index=False))
+
+
+def cmd_language_features(cfg, paths, args) -> None:
+    from bpp.nlp.features import run_language_features
+    run_language_features(cfg, paths, args.doc_id, args.lm_train_doc_id)
+
+
 def cmd_status(cfg, paths, args) -> None:
     steps = [
         ("IBBI announcements", paths.ibbi_announcements, "bpp ibbi-scrape"),
@@ -153,6 +183,11 @@ def cmd_status(cfg, paths, args) -> None:
         ("Extraction report", paths.extraction_report, "bpp extract-text && bpp extract-sections"),
         ("Labelled documents", paths.documents_labeled, "bpp assign-labels"),
         ("QA sheet", paths.qa_sheet, "bpp qa-sample"),
+        ("Financials (extracted)", paths.financials_extracted, "bpp financials"),
+        ("Ratios (stream C)", paths.ratios, "bpp financials"),
+        ("Financials spot-check sheet", paths.financials_qa_sheet, "bpp financials"),
+        ("Loughran-McDonald dictionary", paths.lm_dictionary, "download to data/manual/ (docs/07_phase4_language.md)"),
+        ("Language features (stream B)", paths.language_features, "bpp language-features"),
     ]
     print(f"data folder: {paths.data}\n")
     next_step = None
@@ -252,6 +287,19 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--n", type=int)
     sp.add_argument("--overwrite", action="store_true")
     add("qa-score", cmd_qa_score, "score the filled hand-check sheet")
+    sp = add("financials", cmd_financials,
+             "statements -> standard fields -> validation -> the 12 stream-C ratios")
+    sp.add_argument("--doc-id", nargs="+", help="only these documents")
+    sp.add_argument("--no-spot-check", action="store_true", help="skip the hand-check sheet")
+    sp.add_argument("--overwrite-spot-check", action="store_true",
+                    help="replace the spot-check sheet even if it has hand checks in it")
+    add("financials-score", cmd_financials_score, "score the filled financials spot-check sheet")
+    sp = add("language-features", cmd_language_features,
+             "tone, hedging, readability, auditor flags, drift and perplexity")
+    sp.add_argument("--doc-id", nargs="+", help="only these documents")
+    sp.add_argument("--lm-train-doc-id", nargs="+",
+                    help="documents to fit the healthy-firm reference model on "
+                         "(training folds only; without this, perplexity is left empty)")
     add("status", cmd_status, "show progress and the next step")
     sp = add("demo", cmd_demo, "run Phases 1-2 on synthetic data")
     sp.add_argument("--out", help="folder for demo data (default data_demo/)")
