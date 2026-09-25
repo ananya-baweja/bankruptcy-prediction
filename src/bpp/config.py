@@ -67,6 +67,31 @@ class Paths:
         return self.manual / "firm_financials.csv"
 
     @property
+    def xbrl_financials(self) -> Path:
+        """Phase 3 gap-fill: figures taken by hand from NSE/BSE XBRL annual results."""
+        return self.manual / "xbrl_financials.csv"
+
+    @property
+    def xbrl_exchange(self) -> Path:
+        """Figures parsed from the exchanges' XBRL annual results (bpp xbrl-financials)."""
+        return self.interim / "xbrl_financials_exchange.csv"
+
+    @property
+    def lm_dictionary(self) -> Path:
+        """Phase 4: the Loughran-McDonald dictionary, downloaded once by the team.
+
+        Not vendored: it is republished annually, and a silent copy in the repo
+        would make a tone result impossible to reproduce. See
+        ``docs/07_phase4_language.md``.
+        """
+        return self.manual / "loughran_mcdonald.csv"
+
+    @property
+    def leakage_review(self) -> Path:
+        """Reports read for leakage: doc_id, decision (exclude|keep), reason."""
+        return self.manual / "leakage_review.csv"
+
+    @property
     def reviewed_matches(self) -> Path:
         return self.manual / "ibbi_listed_matches_reviewed.csv"
 
@@ -120,6 +145,10 @@ class Paths:
         return self.qa / "section_qa_sheet.csv"
 
     @property
+    def financials_qa_sheet(self) -> Path:
+        return self.qa / "financials_spot_check.csv"
+
+    @property
     def extraction_report(self) -> Path:
         return self.interim / "extraction_report.csv"
 
@@ -143,6 +172,34 @@ class Paths:
     @property
     def missing_reports(self) -> Path:
         return self.processed / "missing_reports.csv"
+
+    # ---- Phase 3: financial statements and ratios ----
+    # Note: ``financials`` above is the team's manual input (total assets for
+    # peer matching). These are what Phase 3 produces, and never overwrite it.
+    @property
+    def financials_figures(self) -> Path:
+        """Audit trail: one row per figure, with page, label and confidence."""
+        return self.processed / "financials_figures.csv"
+
+    @property
+    def financials_extracted(self) -> Path:
+        """One row per company-year, one column per standard field."""
+        return self.processed / "financials_extracted.csv"
+
+    @property
+    def ratios(self) -> Path:
+        """The stream-C table: 12 ratios per company-year."""
+        return self.processed / "ratios.csv"
+
+    @property
+    def financials_missing(self) -> Path:
+        return self.processed / "financials_missing.csv"
+
+    # ---- Phase 4: language features (stream B) ----
+    @property
+    def language_features(self) -> Path:
+        """One row per report: tone, hedging, readability, flags, drift, perplexity."""
+        return self.processed / "language_features.csv"
 
     def ensure(self) -> "Paths":
         """Create all folders (safe to call repeatedly)."""

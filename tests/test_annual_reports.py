@@ -47,3 +47,10 @@ def test_register_manual_reports(paths):
     man = register_manual_reports(paths).set_index("doc_id")
     assert man.loc["BSE1_FY2019", "pub_date"] == "2019-08-30"
     assert man.loc["BSE1_FY2019", "status"] == "registered"
+
+
+def test_ocr_scale_caps_giant_pages():
+    from bpp.extract.pdf_text_pdfium import MAX_OCR_SIDE_PX, ocr_scale
+    assert ocr_scale(595, 842, 300) == 300 / 72                    # A4 renders at 300 dpi
+    s = ocr_scale(3750, 5000, 300)                                  # a scan declared at its pixel size
+    assert abs(5000 * s - MAX_OCR_SIDE_PX) < 1e-6 and s < 300 / 72
