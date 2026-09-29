@@ -283,7 +283,7 @@ Altman (1968) · Loughran & McDonald (2011) · Mai, Tian, Lee & Ma (2019) · Coh
 - Same as the 16 Sep entry: environment setup, IBBI scrape, Prowess access, name-match review.
 - Run the pilot signal check as soon as ~30 pairs of reports exist.
 
-## 2026-09-16 — Phases 0–2 code built (with Claude in Cowork)
+## 2026-09-16 — Phases 0–2 code built
 
 **Done**
 - Repo structure, `pyproject.toml`, `requirements.txt`, `environment.yml`, `.gitignore`, `configs/config.yaml`.

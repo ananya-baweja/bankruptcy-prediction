@@ -32,7 +32,7 @@ def _data(tmp_path: Path, xbrl_firms: list[str]) -> Paths:
     paths.manual.mkdir(parents=True)
     pd.DataFrame({"doc_id": ["BSE1_FY2019"], "decision": ["exclude"],
                   "reason": ["own_petition: p6, a creditor's petition\nlisted before NCLT"],
-                  "reviewed_by": ["Claude (read); Gaurav (approved)"]}).to_csv(paths.leakage_review, index=False)
+                  "reviewed_by": ["Gaurav (approved)"]}).to_csv(paths.leakage_review, index=False)
     pd.DataFrame({"firm_id": xbrl_firms, "fy": [2019] * len(xbrl_firms), "field": ["total_assets"] * len(xbrl_firms),
                   "value_cr": [10.5 + k for k in range(len(xbrl_firms))],
                   "note": ["filed, in lakh"] * len(xbrl_firms)}).to_csv(paths.xbrl_exchange, index=False)

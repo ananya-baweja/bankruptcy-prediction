@@ -13,7 +13,7 @@ if not defined PYEXE (
   where python >nul 2>nul && set "PYEXE=python"
 )
 if not defined PYEXE (
-  echo Could not find Python on this laptop. Tell Claude.
+  echo Could not find Python on this laptop. Install Python 3 and run this again.
   pause
   exit /b 1
 )
