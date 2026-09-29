@@ -157,7 +157,13 @@ python scripts/exchange_pipeline.py --data-dir D full-finalize --jobs-out J     
 python scripts/exchange_pipeline.py --data-dir D parse                                 # re-match IBBI (bracket tie-break)
 python scripts/exchange_pipeline.py --data-dir D full-amend --jobs-out J               # corrections; 020 lists, 021 reports
 python scripts/pilot_report.py --data-dir D --name full                                # after text, xbrl, phases, cincheck
+python scripts/process_reports.py --data-dir D export-text                             # report text -> processed/
+python scripts/process_reports.py --data-dir D export-evidence                         # QA evidence -> processed/evidence/
 ```
+
+`processed/` is the folder the team shares. The last two steps put the report text and the files
+behind every check in its README (QA summary, leakage decisions, CIN check, cohort corrections, XBRL
+results) inside it, with `evidence/MANIFEST.csv` giving each file's SHA-256.
 
 ## Commands (processing session)
 

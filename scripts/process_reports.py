@@ -3,6 +3,8 @@
     python scripts/process_reports.py --data-dir D text      # page text (pypdfium2 + OCR), parallel
     python scripts/process_reports.py --data-dir D cincheck  # CIN printed in each insolvent firm's report
     python scripts/process_reports.py --data-dir D phases    # sections, labels, financials, language
+    python scripts/process_reports.py --data-dir D export-text      # the cohort's report text -> processed/
+    python scripts/process_reports.py --data-dir D export-evidence  # the checks' evidence -> processed/evidence/
 
 ``text`` writes ``interim/pages/<doc_id>.json`` in exactly the layout of
 ``bpp extract-text``; everything after it is the project's own code, unchanged.
@@ -186,6 +188,141 @@ def step_export_text(paths: Paths, n_parts: int = 2) -> None:
     log.info("report text of %d reports -> processed/report_sections_1..%d.jsonl.gz", len(recs), n_parts)
 
 
+#: The files behind the checks the dataset's README reports, copied into
+#: ``processed/evidence/`` so that ``processed/`` can be handed on alone:
+#: (source under the data folder, destination under ``processed/evidence/``, what it shows).
+#: ``{qa}`` is the ``pilot_report.py --name`` of the run.
+EVIDENCE_FILES = [
+    ("interim/qa/{qa}/summary.md", "qa/summary.md",
+     "the checks in numbers: reports read, exclusions, report reader vs XBRL, unrecoverable company-years, CIN check"),
+    ("interim/qa/{qa}/pdf_vs_xbrl_by_field.csv", "qa/pdf_vs_xbrl_by_field.csv",
+     "report reader vs XBRL per field: figures compared, share within 1% and within 5%"),
+    ("interim/qa/{qa}/pdf_vs_xbrl_mismatches.csv", "qa/pdf_vs_xbrl_mismatches.csv",
+     "every figure where the report and the XBRL filing differ by more than 1%, with the page and the diagnosis"),
+    ("interim/qa/{qa}/unrecoverable_by_class.csv", "qa/unrecoverable_by_class.csv",
+     "company-years with a core figure missing after every source, and where each year's figures came from, by class"),
+    ("interim/qa/{qa}/coverage_by_class.csv", "qa/coverage_by_class.csv",
+     "share of missing and computed values per column, by class"),
+    ("interim/qa/{qa}/signal_check.csv", "qa/signal_check.csv",
+     "each feature by class, compared within pairs; constant features flagged"),
+    ("interim/qa/financials_spot_check.csv", "qa/financials_spot_check.csv",
+     "the 10% sample of company-years to check by hand against the PDFs (value_correct, page_correct)"),
+    ("interim/ibbi_cirp_debtors.csv", "cohort/ibbi_cirp_debtors.csv",
+     "IBBI's CIRP records: every corporate debtor admitted, with its CIN"),
+    ("interim/listed_universe.csv", "cohort/listed_universe.csv",
+     "the listed companies (BSE/NSE) the debtors and peers were matched against, with their industry"),
+    ("interim/ibbi_listed_matches.csv", "cohort/ibbi_listed_matches.csv",
+     "each IBBI debtor matched to a listed company, with the score and the CIN evidence"),
+    ("interim/distressed_eligibility.csv", "cohort/distressed_eligibility.csv",
+     "each matched insolvent firm against the cohort rules (reports before admission, size year)"),
+    ("interim/full_peer_candidates.csv", "cohort/peer_candidates.csv",
+     "the same-industry candidate peers of each insolvent firm, before sizing"),
+    ("interim/amend_retired_pairs.csv", "cohort/amend_retired_pairs.csv",
+     "pairs retired on review, with the reason"),
+    ("interim/amend_pairs.csv", "cohort/amend_pairs.csv",
+     "pairs formed on review, with both firms' size"),
+    ("interim/amend_unmatched.csv", "cohort/amend_unmatched.csv",
+     "eligible insolvent firms left without a peer within the size band"),
+    ("interim/report_cin_check.csv", "cohort/report_cin_check.csv",
+     "the CIN printed in each insolvent firm's own reports against IBBI's"),
+    ("manual/leakage_review.csv", "documents/leakage_review.csv",
+     "the decision on each report read for leakage (exclude/keep) and why; the pipeline reads manual/leakage_review.csv"),
+    ("interim/qa/leakage_review.csv", "documents/leakage_findings.csv",
+     "what each of those reports says about insolvency, with the page"),
+    ("interim/extraction_report.csv", "documents/extraction_report.csv",
+     "per report: OCR, sections found, audit opinion, and the year its own text is about"),
+    ("interim/xbrl_unit_corrections.csv", "xbrl/xbrl_unit_corrections.csv",
+     "XBRL total assets a power of ten off the firm's other filings, as filed and as used for sizing"),
+]
+
+
+def _sha256(path: Path) -> str:
+    import hashlib
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for block in iter(lambda: fh.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def _n_rows(path: Path) -> int | None:
+    """Data rows of a CSV (quoted line breaks count once); None for other files."""
+    if not path.name.endswith((".csv", ".csv.gz")):
+        return None
+    return len(pd.read_csv(path, dtype=str, keep_default_na=False))
+
+
+def step_export_evidence(paths: Paths, qa_name: str = "full") -> pd.DataFrame:
+    """The files behind the dataset README's checks, in ``processed/evidence/``.
+
+    ``processed/`` is the folder that gets shared, and its README cites the QA summary,
+    the leakage decisions, the CIN check, the cohort corrections and the exchange XBRL
+    results, which live in ``interim/`` and ``manual/``. This copies them into
+    ``processed/evidence/`` with a ``MANIFEST.csv`` (rows, bytes, SHA-256 and what each
+    shows). The XBRL table goes in twice: the cohort's firms as CSV, and - when the table
+    holds more firms than the cohort - every listed company's filings, the universe the
+    peers were sized from, as a gzip without a timestamp so a re-run gives the same bytes.
+    A source this run did not produce is listed as missing and any older copy removed,
+    so the folder never shows evidence from another run. Returns the manifest.
+    """
+    import gzip
+    import shutil
+
+    out = paths.processed / "evidence"
+    rows: list[dict] = []
+
+    def record(dest: str, source: str, shows: str) -> None:
+        f = out / dest
+        rows.append({"file": dest, "rows": _n_rows(f), "bytes": f.stat().st_size, "sha256": _sha256(f),
+                     "source": source, "shows": shows, "note": ""})
+
+    def missing(dest: str, source: str, shows: str, note: str) -> None:
+        (out / dest).unlink(missing_ok=True)
+        rows.append({"file": dest, "rows": None, "bytes": None, "sha256": "", "source": source,
+                     "shows": shows, "note": note})
+        log.warning("evidence: %s - %s", dest, note)
+
+    for src_t, dest, shows in EVIDENCE_FILES:
+        src = src_t.format(qa=qa_name)
+        if not (paths.data / src).exists():
+            missing(dest, src, shows, "source not found")
+            continue
+        (out / dest).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(paths.data / src, out / dest)
+        record(dest, src, shows)
+
+    xsrc = paths.xbrl_exchange.relative_to(paths.data).as_posix()
+    cohort_dest, all_dest = "xbrl/xbrl_financials_exchange.csv", "xbrl/xbrl_financials_all_listed.csv.gz"
+    cohort_shows = "the cohort firms' exchange XBRL results, every year filed (the other source of financials_figures.csv)"
+    all_shows = "every listed company's exchange XBRL results: the universe the peers were sized from"
+    if not paths.xbrl_exchange.exists() or not paths.cohort.exists():
+        missing(cohort_dest, xsrc, cohort_shows, "XBRL table or cohort.csv not found")
+        missing(all_dest, xsrc, all_shows, "XBRL table or cohort.csv not found")
+    else:
+        firms = set(pd.read_csv(paths.cohort, dtype=str)["firm_id"])
+        x = pd.read_csv(paths.xbrl_exchange, dtype=str, keep_default_na=False)
+        (out / cohort_dest).parent.mkdir(parents=True, exist_ok=True)
+        x[x["firm_id"].isin(firms)].to_csv(out / cohort_dest, index=False)
+        record(cohort_dest, f"{xsrc} (cohort firms)", cohort_shows)
+        if x["firm_id"].nunique() > len(firms & set(x["firm_id"])):
+            with open(out / all_dest, "wb") as fh, \
+                 gzip.GzipFile(filename="", mode="wb", fileobj=fh, compresslevel=9, mtime=0) as gz, \
+                 open(paths.xbrl_exchange, "rb") as src_fh:
+                shutil.copyfileobj(src_fh, gz)
+            record(all_dest, xsrc, all_shows)
+        else:
+            missing(all_dest, xsrc, all_shows, "the XBRL table holds only the cohort's firms")
+
+    man = pd.DataFrame(rows)
+    man["rows"] = man["rows"].astype("Int64")
+    man["bytes"] = man["bytes"].astype("Int64")
+    man.to_csv(out / "MANIFEST.csv", index=False)
+    n_ok = int((man["sha256"] != "").sum())
+    log.info("evidence: %d files (%.1f MB) -> processed/evidence/, MANIFEST.csv; missing: %s",
+             n_ok, man["bytes"].sum() / 1e6, man.loc[man["sha256"] == "", "file"].tolist() or "none")
+    return man
+
+
 def _cohort_doc_ids(paths: Paths) -> list[str] | None:
     """Reports of the cohort's firms (any year); None when there is no cohort yet."""
     cohort = paths.processed / "cohort.csv"
@@ -214,10 +351,11 @@ def step_phases(paths: Paths, cfg: dict, workers: int = 1) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--data-dir", required=True, type=Path)
-    ap.add_argument("step", choices=["text", "cincheck", "phases", "export-text"])
+    ap.add_argument("step", choices=["text", "cincheck", "phases", "export-text", "export-evidence"])
     ap.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 2)))
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--cohort-only", action="store_true", help="text: only the cohort's reports")
+    ap.add_argument("--qa-name", default="full", help="export-evidence: the pilot_report.py run to copy")
     a = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s",
                         datefmt="%H:%M:%S")
@@ -227,6 +365,8 @@ def main() -> None:
         step_text(paths, cfg, a.workers, a.force, a.cohort_only)
     elif a.step == "export-text":
         step_export_text(paths)
+    elif a.step == "export-evidence":
+        step_export_evidence(paths, a.qa_name)
     elif a.step == "cincheck":
         step_cincheck(paths)
     else:

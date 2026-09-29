@@ -115,6 +115,26 @@ basis_for_modified_opinion, going_concern, emphasis_of_matter` (null when not fo
 (start and end page). As extracted in Phase 2, not yet entity-masked. Two parts so neither outgrows a
 20 MB transfer; read both and concatenate.
 
+### `evidence/` — the files behind the checks the dataset reports
+Copied from `interim/` and `manual/` by `process_reports.py export-evidence`, so `processed/` can be
+shared on its own and every check in its README can be traced. Regenerated on each run: a source the
+run did not produce is listed as missing and its old copy deleted. Do not edit files here; the
+pipeline reads the originals (e.g. `manual/leakage_review.csv`).
+
+| File | From | Shows |
+| --- | --- | --- |
+| `MANIFEST.csv` | | every file below: `file, rows, bytes, sha256, source, shows, note` (`note` says why a file is missing) |
+| `qa/summary.md`, `qa/pdf_vs_xbrl_by_field.csv`, `qa/pdf_vs_xbrl_mismatches.csv`, `qa/unrecoverable_by_class.csv`, `qa/coverage_by_class.csv`, `qa/signal_check.csv` | `interim/qa/full/` (`pilot_report.py --name full`; `--qa-name` picks another run) | the QA numbers: reader vs XBRL, unrecoverable company-years, coverage, signal check |
+| `qa/financials_spot_check.csv` | `interim/qa/` | the 10% hand-check sample (blank until filled in) |
+| `cohort/ibbi_cirp_debtors.csv`, `listed_universe.csv`, `ibbi_listed_matches.csv`, `distressed_eligibility.csv`, `peer_candidates.csv` (= `full_peer_candidates.csv`) | `interim/` | how the cohort was drawn: IBBI debtors → listed matches → eligibility → same-industry candidates |
+| `cohort/amend_retired_pairs.csv`, `amend_pairs.csv`, `amend_unmatched.csv`, `report_cin_check.csv` | `interim/` | the corrections of 25 Sep 2026 and the CIN check |
+| `documents/leakage_review.csv` | `manual/` | the leakage decisions (exclude/keep, reason, reviewer) |
+| `documents/leakage_findings.csv` | `interim/qa/leakage_review.csv` | what each reviewed report says, with the page |
+| `documents/extraction_report.csv` | `interim/` | per report: OCR, section lengths, audit opinion, `newest_year_named`, `report_year_mismatch` |
+| `xbrl/xbrl_unit_corrections.csv` | `interim/` | XBRL filings corrected for a unit slip when sizing |
+| `xbrl/xbrl_financials_exchange.csv` | `interim/xbrl_financials_exchange.csv`, cohort firms | the other source of `financials_figures.csv`: every year each cohort firm filed |
+| `xbrl/xbrl_financials_all_listed.csv.gz` | `interim/xbrl_financials_exchange.csv` | every listed company's filings, the universe the peers were sized from (written only when the table holds more than the cohort; gzip without a timestamp, so a re-run gives the same SHA-256) |
+
 ### `financials_figures.csv` — one row per extracted figure (Phase 3 audit trail)
 `firm_id, fy, field, value_cr, source (exchange_xbrl | report_current_year | next_report_comparative | manual_xbrl),
 source_doc_id, page, statement, statement_scope, label, match_how, match_score, unit,
