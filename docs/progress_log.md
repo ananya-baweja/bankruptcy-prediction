@@ -2,6 +2,24 @@
 
 What was done each working session, newest first. Keep entries short: what, result, next.
 
+## 2026-09-29 — `processed/` carries its own evidence
+
+**Found (Gaurav):** the shared `processed/` folder's README cited the QA summary, the leakage
+decisions and the XBRL results in `interim/` and `manual/`, which a teammate or examiner given only
+`processed/` would not have.
+
+**Done**
+- `process_reports.py export-evidence` copies the files behind every check into
+  `processed/evidence/` (`qa/`, `cohort/`, `documents/`, `xbrl/`) with `MANIFEST.csv` (rows, bytes,
+  SHA-256, what each shows): 22 files, 11.5 MB, incl. every listed company's XBRL filings (2.8 MB
+  gzip) so the peer sizing can be re-checked. The dataset README now points only inside the folder.
+- Every number the README reports was recomputed from `processed/` alone (57 checks, all pass).
+- `00_project_plan.md` phase table brought up to date (it still showed Phases 3–4 as not started).
+- 2 new tests.
+
+**Next:** the hand checks (financials spot check; the Phase 2 section check, `bpp qa-sample`, not yet
+run on the real reports); then Phase 5 baselines.
+
 ## 2026-09-25 — Cohort corrections applied; dataset complete for modelling
 
 **Decided (Gaurav):** "do whatever is correct" on the five recommendations below.
@@ -265,7 +283,7 @@ Altman (1968) · Loughran & McDonald (2011) · Mai, Tian, Lee & Ma (2019) · Coh
 - Same as the 16 Sep entry: environment setup, IBBI scrape, Prowess access, name-match review.
 - Run the pilot signal check as soon as ~30 pairs of reports exist.
 
-## 2026-09-16 — Phases 0–2 code built (with Claude in Cowork)
+## 2026-09-16 — Phases 0–2 code built
 
 **Done**
 - Repo structure, `pyproject.toml`, `requirements.txt`, `environment.yml`, `.gitignore`, `configs/config.yaml`.

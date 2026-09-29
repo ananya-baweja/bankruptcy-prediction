@@ -3,7 +3,7 @@
 
 Start it by double-clicking START_DOWNLOADER.bat in this folder (or run
 `python bpp_fetch.py`). It watches the jobs\\ folder for job files that
-Claude writes, downloads what each job lists into THIS folder, and logs every
+the processing session writes, downloads what each job lists into THIS folder, and logs every
 request under logs\\. Leave the window open while downloads are needed; close
 it (or press Ctrl+C) to stop. It resumes where it left off when restarted.
 
@@ -16,7 +16,7 @@ Safety:
 Standard library only - nothing to install.
 
 1.1: several downloads at once (``workers`` per job) under one shared,
-per-website speed limit; restarts itself when Claude updates this file
+per-website speed limit; restarts itself when this file is updated
 (START_DOWNLOADER.bat relaunches it on exit code 3).
 1.4: a file counts as downloaded only when it is complete (Content-Length
 matches; a PDF ends with %%EOF); otherwise it is downloaded again, up to 3 times.

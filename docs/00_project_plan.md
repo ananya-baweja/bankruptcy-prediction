@@ -55,11 +55,11 @@ training folds. Honest baseline to beat: XGBoost on B + C + averaged FinBERT vec
 
 | Phase | Weeks | Content | Status |
 | --- | --- | --- | --- |
-| 0 Setup | 1 | repo, config, CLI, tests, synthetic demo | **code done** |
-| 1 Cohort | 1–3 | IBBI CIRP list → listed firms → reviewed matches → healthy peers → firm-year frame | **code done**, data pending |
-| 2 Documents | 2–4 | download/collect PDFs, OCR, section extraction, labels + leakage rules, QA | **code done**, data pending |
-| 3 Ratios | 3–4 | liquidity, profitability, leverage, solvency, pledge %, Altman Z″; winsorise; fold-wise scaling | not started |
-| 4 NLP engine | 4–8 | NER masking, coref, SVO + hedging, LM dictionary, n-gram LM perplexity, Lesk ablation, FinBERT + Word2Vec embeddings, drift features, lexicon mining | not started |
+| 0 Setup | 1 | repo, config, CLI, tests, synthetic demo | **done** |
+| 1 Cohort | 1–3 | IBBI CIRP list → listed firms → reviewed matches → healthy peers → firm-year frame | **done**: 135 pairs from public data, all insolvent firms CIN-confirmed (25 Sep; `docs/08_real_data.md`) |
+| 2 Documents | 2–4 | download/collect PDFs, OCR, section extraction, labels + leakage rules, QA | **done**: 1,154 reports read, 1,080 company-years labelled, 719 included; section hand-check not yet done |
+| 3 Ratios | 3–4 | liquidity, profitability, leverage, solvency, pledge %, Altman Z″; winsorise; fold-wise scaling | **done** except pledge % (shareholding filings not collected); winsorising and scaling are fitted inside the folds in Phase 5 |
+| 4 NLP engine | 4–8 | NER masking, coref, SVO + hedging, LM dictionary, n-gram LM perplexity, Lesk ablation, FinBERT + Word2Vec embeddings, drift features, lexicon mining | **stream B done** (LM dictionary, hedging, readability, auditor flags, drift; perplexity is fitted per fold); report text for stream A exported; masking, coref, SVO, Lesk, embeddings and lexicon mining not started (Colab) |
 | 5 Baselines | 8 | Altman Z″, logistic regression, XGBoost (ratios; ratios + linguistic) | not started |
 | 6 Deep model | 9–11 | GatedFusionNet, adversarial head, temporal drift variant, CNN comparison | not started |
 | 7 Experiments | 11–12 | modality ablations, embedding/WSD, masking, adversarial, drift, horizon t-1 vs t-2; DeLong | not started |
