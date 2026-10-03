@@ -42,6 +42,7 @@ add(new Paragraph({ children: [new TextRun({ text: "FINAL REPORT", bold: true, s
   P("*Do the words in an annual report warn of insolvency earlier, or better, than the numbers do? A matched study of 135 Indian listed companies admitted to insolvency under the Insolvency and Bankruptcy Code, 2016, and 135 healthy peers.*"),
   Tbl(null, [
     ["**Courses**", "Natural Language Processing and Deep Learning (third-year project)"],
+    ["**Team**", "Kartik Agrawal (I001), Ananya Baweja (I003)"],
     ["**Report date**", "3 October 2026"],
     ["**Stage**", "Complete: data, models, evaluation, the checks promised in the progress report of 1 October 2026, and a tool that scores a new company's annual report"],
     ["**Data**", "135 matched pairs, 1,154 annual reports read, 763 company-years modelled (362 that later entered insolvency, 401 healthy)"],
