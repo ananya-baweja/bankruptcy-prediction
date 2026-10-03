@@ -151,6 +151,13 @@ _BALANCE_SHEET_WORDS = [re.compile(p, re.I) for p in (
     r"total\s+assets", r"other\s+equity|reserves\s*(?:and|&)\s*surplus", r"property,?\s+plant|fixed\s+assets")]
 
 
+_PROFIT_AND_LOSS_WORDS = [re.compile(p, re.I) for p in (
+    r"(?:revenue|income)\s+from\s+operations", r"total\s+(?:expenses|expenditure)",
+    r"profit\s*(?:/\s*\(?loss\)?)?\s+before\s+(?:exceptional|extraordinary|tax)",
+    r"earnings\s+per\s+(?:equity\s+)?share", r"finance\s+costs?|interest\s+expense",
+    r"tax\s+expense|current\s+tax")]
+
+
 def _reads_like_balance_sheet(text: str) -> bool:
     return sum(1 for p in _BALANCE_SHEET_WORDS if p.search(text)) >= 3
 
@@ -176,6 +183,14 @@ def _heading_tail_ok(tail: str, heading: str = "") -> bool:
     if not t:
         return True
     if _SENTENCE.search(t):
+        return False
+    # a line the PDF wrapped mid-sentence: "...which comprise the standalone balance
+    # sheet as at March 31, 2022, and" (an auditor's report, read as the statement)
+    if re.search(r"(?:,|\band|\bor|\bthe|\bof|\bwith)\s*$", t, re.I):
+        return False
+    # ...or a list of the statements: "Balance Sheet as at 31st March, 2017, the Statement
+    # of Profit and Loss and the Cash Flow Statement" (JVL Agro FY2017, the auditor's report)
+    if re.search(r"\bstatement\s+of\b|\bcash\s+flows?\b|,\s*the\b", t, re.I):
         return False
     # a contents line: the name, maybe its date, then a page number ("Cash Flow
     # Statement 144", "Balance Sheet as at 31 March, 2020 67") - chosen over the
@@ -246,6 +261,16 @@ def locate_statements(pages: list[dict[str, Any]], cfg: dict[str, Any],
     out: dict[str, StatementLocation] = {}
     for name in STATEMENTS:
         candidates = [h for h in hits if h[0] == name]
+        if not candidates and name == "profit_and_loss" and out.get("balance_sheet") is not None:
+            # No heading in the text layer (printed as an image on JVL Agro FY2017): the page
+            # after the balance sheet that reads like one, by its line items, is the statement.
+            anchor = out["balance_sheet"]
+            for page in pages:
+                if (anchor.start_page < page["page"] <= anchor.start_page + 4
+                        and money_lines.get(page["page"], 0) >= min_money_lines
+                        and sum(1 for rx in _PROFIT_AND_LOSS_WORDS if rx.search(page["text"])) >= 4):
+                    candidates = [(name, anchor.scope, page["page"], "")]
+                    break
         if not candidates:
             continue
         # A page that only mentions the statement carries no figures, so pages
@@ -279,6 +304,11 @@ def locate_statements(pages: list[dict[str, Any]], cfg: dict[str, Any],
 
         loc = StatementLocation(statement=name, scope=scope, start_page=start_page,
                                 end_page=end_page, heading=heading)
+        if not heading:
+            loc.flags.append("heading_not_found_located_by_line_items")
+            bs = out.get("balance_sheet")
+            if bs is not None and bs.start_page < start_page <= bs.end_page:
+                bs.end_page = start_page - 1        # the balance sheet had run on into it
         if scope == "consolidated":
             loc.flags.append("consolidated_only")
         elif scope == "unscoped":

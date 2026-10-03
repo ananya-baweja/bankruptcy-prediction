@@ -68,7 +68,12 @@ OPINION_SEVERITY = {"unmodified": 0.0, "qualified": 1.0, "adverse": 2.0, "discla
 # hypothetical anywhere before it in that clause cancels it, and a later clause
 # can still assert the failure -- one annexure often denies default and then
 # reports a wilful defaulter.
-_CLAUSE_SPLIT = re.compile(r"[.;\n]+")
+# A line break ends a clause only where the next line opens a new item -- "(ix)",
+# "(a)", "8)", "8.", a bullet. PDF text wraps mid-sentence, and splitting on every
+# line break cut "the Company has not\ndefaulted in repayment" in two, so the
+# denial was read as a default (30 of 336 healthy reports were flagged that way).
+_CLAUSE_SPLIT = re.compile(
+    r"[.;]+|\n(?=\s*(?:\(?[ivxlc]{1,5}\)|\(?[a-z]\)|\d{1,2}[.)]|[•\-–]))", re.I)
 _NEGATION_CUE = re.compile(r"\b(?:not|no|never|neither|nor|without|whether|nil|none)\b", re.I)
 
 _CARO_DEFAULT = re.compile(
@@ -78,9 +83,11 @@ _CARO_DEFAULT = re.compile(
     r"|delay(?:s|ed)?\s+in\s+(?:the\s+)?repayment", re.I)
 
 # Stated as a failure, so a negation cancels it.
+# The words between "statutory dues" and "outstanding" are checked for a negation too:
+# "...statutory dues, as applicable, and no such statutory dues were outstanding".
 _STATUTORY_FAILURE = re.compile(
     r"arrears\s+of\s+statutory\s+dues"
-    r"|statutory\s+dues[\w\s,'\-]{0,60}(?:outstanding|in\s+arrears|not\s+been\s+paid)", re.I)
+    r"|statutory\s+dues(?P<between>[\w\s,'\-]{0,60})(?:outstanding|in\s+arrears|not\s+been\s+paid)", re.I)
 # Stated with a negation *in* it, which is itself the failure, so it is matched
 # literally and must not be run through the negation check.
 _STATUTORY_IRREGULAR = re.compile(r"\bnot\s+been\s+regular\s+in\s+depositing", re.I)
@@ -93,8 +100,10 @@ def _asserted(pattern: re.Pattern[str], text: str) -> bool:
     "whether the company has defaulted" is the Order's question, not an answer.
     """
     for clause in _CLAUSE_SPLIT.split(text or ""):
+        clause = re.sub(r"\s+", " ", clause)
         for match in pattern.finditer(clause):
-            if not _NEGATION_CUE.search(clause[:match.start()]):
+            between = match.groupdict().get("between") or ""
+            if not _NEGATION_CUE.search(clause[:match.start()]) and not _NEGATION_CUE.search(between):
                 return True
     return False
 
