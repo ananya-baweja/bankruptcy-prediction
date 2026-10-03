@@ -5,8 +5,29 @@ Bankruptcy Code, 2016) for BSE/NSE-listed companies. The model combines annual-r
 (MD&A, Board's report, auditor's report, CARO annexure) with accounting ratios.
 It is a 3rd-year project for the **Natural Language Processing** and **Deep Learning** courses.
 
-> **Status:** Phases 0–2 (setup, cohort building, document collection and section extraction) are
-> built and tested on synthetic data. Phases 3–8 are planned in [`docs/00_project_plan.md`](docs/00_project_plan.md).
+> **Status:** complete. The final report is [`docs/Final_Report_Bankruptcy_Prediction.docx`](docs/Final_Report_Bankruptcy_Prediction.docx);
+> the final models, the evaluation and the tool that scores a new company's annual report are in
+> [`final_run/`](final_run/README.md), and the two modelling notebooks in [`notebooks/`](notebooks/).
+
+## Results
+
+135 Indian listed companies admitted to insolvency under the IBC and 135 healthy peers (same BSE
+industry sub-group, similar size), 763 company-years, five folds grouped by matched pair.
+PR-AUC, mean over the folds (0.5 is chance on this balanced sample):
+
+| Model | PR-AUC |
+| --- | --- |
+| Altman Z'' (emerging markets) | 0.712 |
+| Logistic regression, 11 ratios | 0.710 |
+| Gradient boosting, ratios | 0.747 |
+| Gradient boosting, ratios + 53 language features | 0.795 |
+| Deep network: frozen FinBERT, BiGRU with attention, gated fusion with the features and ratios | 0.783 |
+| **Full system**: network and gradient boosting averaged | **0.807** |
+
+The full system beats the ratios alone in all five folds (+0.059; pair-bootstrap 95% interval
++0.009 to +0.105; DeLong p < 0.001 for ROC-AUC). The gain is largest where the accounts still look
+healthy (Altman Z'' above the median: +0.164). The auditor's report carries more of the signal than
+management's MD&A. Details, tests and limitations: the final report.
 
 ## Quick start
 
@@ -45,12 +66,16 @@ src/bpp/
   scrape/               IBBI, BSE/NSE lists, annual reports
   cohort/               name matching, peers, sample frame, labels
   extract/              PDF text + OCR, sections, QA
-  features/ nlp/ models/ eval/   Phases 3-8 (to be built)
+  sources/              exchange XBRL results and download jobs
+  features/             financial statements from the reports, ratios
+  nlp/                  language features, lexicon, trigram language model, drift
   cli.py                the bpp command
   synthetic.py          fake data for the demo and tests
 data/                   raw/ interim/ processed/ (not in git), manual/ (templates in git)
-docs/                   plan, setup, phase guides, data dictionary, decisions and progress logs
-notebooks/              setup + smoke test (local or Colab)
+docs/                   plan, setup, phase guides, data dictionary, decisions and progress logs,
+                        the progress report and the final report
+final_run/              final models, evaluation, report builder, scoring tool
+notebooks/              setup + smoke test; 1_NLP_text_to_features, 2_DL_model_and_evaluation (Colab)
 tests/                  pytest suite
 ```
 
