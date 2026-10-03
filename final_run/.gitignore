@@ -1,0 +1,20 @@
+# inputs and outputs of the final run live on the Drive, never in git
+data/
+data_v*/
+folds.csv
+cache/
+results*/
+final_models/
+demo_out/
+check_out/
+archive_v1/
+examples/
+scorer/bpp/
+scorer/loughran_mcdonald.csv
+report/fig/
+report/narrative.json
+report/*.docx
+report/node_modules/
+scoring/*.json
+scoring/demo_out/
+*.log

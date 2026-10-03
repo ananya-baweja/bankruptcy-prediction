@@ -833,6 +833,55 @@ def test_a_wrapped_balance_sheet_line_in_the_directors_report_is_not_the_stateme
     assert locs["balance_sheet"].start_page == 33
 
 
+def test_the_auditors_report_naming_the_balance_sheet_is_not_the_statement(cfg):
+    """Rane (Madras) FY2022: the opinion paragraph wraps after "...which comprise the" and the
+    next line, "standalone balance sheet as at March 31, 2022, and", read as a heading on a
+    page with enough figures to count as a statement. Every figure then came from that page."""
+    auditors = {"page": 64, "method": "text", "text": "\n".join(
+        ["Independent Auditor's Report", "Opinion",
+         "We have audited the standalone financial statements of the Company, which comprise the",
+         "standalone balance sheet as at March 31, 2022, and",
+         "the standalone statement of profit and loss (including other comprehensive income)"]
+        + [f"Key audit matter {i} amounting to Rs. {100 + i}.00 crore and {90 + i}.00 crore" for i in range(12)])}
+    bs = _bs_page(75, "(Rs. in crores)", [f"Row {i} {1000 + i}.00 {900 + i}.00" for i in range(10)],
+                  heading="Standalone Balance Sheet as at March 31, 2022")
+    locs = locate_statements([auditors, bs], cfg, 2022)
+    assert locs["balance_sheet"].start_page == 75
+
+
+def test_an_auditors_list_of_the_statements_is_not_the_balance_sheet(cfg):
+    """JVL Agro FY2017: "...Balance Sheet as at 31st March, 2017, the Statement of Profit" in the
+    auditor's report, on a page that says "standalone", beat the real (unscoped) balance sheet."""
+    auditors = {"page": 59, "method": "text", "text": "\n".join(
+        ["Report on the Standalone Financial Statements",
+         "We have audited the accompanying standalone financial statements, which comprise the",
+         "Balance Sheet as at 31st March, 2017, the Statement of Profit",
+         "and Loss and the Cash Flow Statement for the year then ended"]
+        + [f"Matter {i} of Rs. {100 + i}.00 crore and {90 + i}.00 crore" for i in range(12)])}
+    bs = _bs_page(65, "(Rs. in crore)", [f"Row {i} {1000 + i}.00 {900 + i}.00" for i in range(10)],
+                  heading="Balance Sheet as at 31st March 2017")
+    locs = locate_statements([auditors, bs], cfg, 2017)
+    assert locs["balance_sheet"].start_page == 65
+
+
+def test_a_profit_and_loss_without_a_heading_is_found_by_its_line_items(cfg):
+    """JVL Agro FY2017 printed the statement's title as an image: the page after the balance
+    sheet carries every P&L line but no heading, and the P&L went unread."""
+    bs = _bs_page(65, "(Rs. in crore)", [f"Row {i} {1000 + i}.00 {900 + i}.00" for i in range(10)],
+                  heading="Balance Sheet as at 31st March 2017")
+    pl = {"page": 66, "method": "text", "text": "\n".join([
+        "(Rs. in crore)", "Note No Reporting Period ended on 31st March 2017 Reporting Period ended on 31st March 2016",
+        "INCOME", "I. Income From Operations 19 3,857.18 4,110.07", "II. Other Income 20 3.12 6.09",
+        "Total Revenue 3,860.30 4,116.16", "EXPENSES", "Cost of materials consumed 21 3,000.00 3,200.00",
+        "Finance costs 24 80.00 75.00", "Depreciation and amortization expense 9 20.00 19.00",
+        "Total Expenses 3,840.00 4,050.00", "Profit before tax 20.30 66.16", "Current tax 5.00 15.00",
+        "Profit for the year 15.30 51.16", "Earnings per equity share 0.09 0.30"])}
+    locs = locate_statements([bs, pl], cfg, 2017)
+    assert locs["profit_and_loss"].start_page == 66
+    assert "heading_not_found_located_by_line_items" in locs["profit_and_loss"].flags
+    assert locs["balance_sheet"].end_page == 65
+
+
 def test_a_thousands_caption_below_the_sheet_is_read(cfg):
     rows = ["Property,Plant and Equipment 4 665 689", " - Investments 5 1,323,772 1,336,376",
             "Total Non-Current Assets 1,324,531 1,337,159", "Inventories 6 1,000,000 1,100,000",

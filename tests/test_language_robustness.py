@@ -63,6 +63,46 @@ def test_a_real_statutory_failure_raises_the_flag(clause):
     assert caro_flags(clause)["caro_statutory_dues_flag"] == 1.0
 
 
+@pytest.mark.parametrize("text", [
+    # CARO 2020 wording as the PDF text layer wraps it (Rane (Madras) FY2022): the
+    # negation ends one line and the default phrase starts the next
+    "(ix) (a) In our opinion, the Company has not\ndefaulted in repayment of loans and borrowing or\n"
+    "in the payment of interest thereon to any lender.",
+    "(b) The Company has not been declared a wilful\ndefaulter by any bank or financial institution.",
+])
+def test_a_denial_wrapped_across_lines_is_still_a_denial(text):
+    assert caro_flags(text)["caro_default_flag"] == 0.0
+
+
+def test_statutory_dues_denied_across_a_line_break():
+    text = ("(vii)(b) According to the information and explanations given to us, there were no\n"
+            "undisputed amounts payable in respect of statutory dues in arrears as at\n"
+            "March 31, 2022 for a period of more than six months.")
+    assert caro_flags(text)["caro_statutory_dues_flag"] == 0.0
+
+
+@pytest.mark.parametrize("clause", [
+    "(vii)(a) the company is generally regular in depositing undisputed statutory dues, as applicable, "
+    "and no such statutory dues were outstanding as at the last day of the financial year",
+    "the Company is generally regular in depositing undisputed statutory dues and Company had no "
+    "arrears of such outstanding statutory dues as at 31st March, 2021",
+])
+def test_a_denial_inside_the_statutory_dues_phrase_cancels_it(clause):
+    assert caro_flags(clause)["caro_statutory_dues_flag"] == 0.0
+
+
+def test_statutory_dues_listed_as_outstanding_still_raise_the_flag():
+    text = ("the Company has been generally regular in depositing undisputed statutory dues, where "
+            "applicable except in the following cases which are outstanding for a period of more than six months")
+    assert caro_flags(text)["caro_statutory_dues_flag"] == 1.0
+
+
+def test_a_new_item_on_a_new_line_still_starts_a_new_clause():
+    text = ("(ix)(a) The Company has not raised any term loans\n"
+            "(b) the Company has defaulted in repayment of dues to banks")
+    assert caro_flags(text)["caro_default_flag"] == 1.0
+
+
 def test_an_annexure_can_deny_default_and_still_report_a_wilful_defaulter():
     """One annexure often does both; the later clause must survive the earlier denial."""
     text = ("(ix)(a) The Company has not defaulted in repayment of loans. "
