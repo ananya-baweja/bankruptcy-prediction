@@ -1,0 +1,7 @@
+# torch: keep the box's existing CUDA build if it has one (pip leaves it alone when already installed)
+torch>=2.1
+transformers>=4.40
+numpy>=1.24
+pandas>=2.0
+scipy>=1.10
+scikit-learn>=1.3
