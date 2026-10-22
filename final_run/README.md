@@ -13,6 +13,7 @@ writes to the dataset.
 | `train_final.py`, `train_final_dl.py` | The final models on all 763 company-years, for scoring new companies |
 | `score.py`, `scorer/` | Scores one annual report PDF: risk score, band, reasons |
 | `bppfinal/` | The modelling table (`table.py`), the network (`dl.py`), the CPU models and the statistics |
+| `run_green.py`, `green_report.py`, `bppfinal/green.py` | The Green AI study: every stage of the pipeline and its variants with codecarbon energy measurement (resumable), the comparison table, the Pareto figure and the pre-registered choice; outputs in `results/green/` (see its `SUMMARY.md` and `DECISIONS.md`) |
 
 ## Inputs (not in git)
 
@@ -36,6 +37,25 @@ python run_cpu.py && python extras_cpu.py                      # minutes on a CP
 python attention.py results && python analyze.py --dl results
 cd report && python make_narrative.py && python charts.py && python diagrams.py && node build_report.js
 ```
+
+Green AI study (~5 h on the RTX 5060 Ti; `pip install codecarbon matplotlib`):
+
+```bash
+python run_green.py                      # baseline, Step 3 check, then the variants (skips finished stages)
+python green_report.py                   # green_results.csv, inference.csv, pareto.png, selection.json
+cd report && node build_green_section.js # the report section alone -> results/green/Green_AI_section.docx
+```
+
+Table 22 of the report (the seed and no-network configurations on the corrected data, from the
+saved predictions of the final run; no GPU needed):
+
+```bash
+python green_on_corrected_data.py "<project folder>/final_run"   # -> results/green/green_on_corrected_data.csv
+```
+
+The submitted report was assembled by inserting Section 11 into the 3 October report with
+`report/merge_green_section.py` (Node's `docx` package could not be installed at the time), so
+Sections 1-10 are byte-for-byte the text of the 3 October build.
 
 After a change to the language features or ratios, `run_gpu.py --out results_v2 --reuse results`
 re-runs only the 30 runs that read them and copies the 15 text-only runs.

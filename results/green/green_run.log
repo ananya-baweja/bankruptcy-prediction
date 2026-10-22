@@ -1,0 +1,398 @@
+2026-10-14 22:16:50  ==== run_green 
+2026-10-14 22:16:52  table build (incl. fold-wise trigram-LM perplexity)
+2026-10-14 22:19:02    [table_build] 125s  2.62 Wh  1.87 g CO2e  GPU peak 0 MB  (codecarbon)
+2026-10-14 22:19:03  table: 763 rows, strict 609, checksum 2a66afb78a14db79 (reference run: 2a66afb78a14db79) MATCH
+2026-10-14 22:19:04  embed finbert_fp16 mdna: ProsusAI/finbert fp16 on cuda, first 200 sentences, 77523 sentences in 763 docs
+2026-10-14 22:19:13     0/763  1s
+2026-10-14 22:19:20     100/763  8s
+2026-10-14 22:19:29     200/763  17s
+2026-10-14 22:19:36     300/763  24s
+2026-10-14 22:19:42     400/763  30s
+2026-10-14 22:19:52     500/763  40s
+2026-10-14 22:20:00     600/763  49s
+2026-10-14 22:20:10     700/763  59s
+2026-10-14 22:20:17    [embed_finbert_fp16_mdna] 72s  2.92 Wh  2.08 g CO2e  GPU peak 463 MB  (codecarbon)
+2026-10-14 22:20:18  embed finbert_fp16 auditor_report: ProsusAI/finbert fp16 on cuda, first 200 sentences, 40650 sentences in 763 docs
+2026-10-14 22:20:20     0/763  0s
+2026-10-14 22:20:24     100/763  5s
+2026-10-14 22:20:29     200/763  9s
+2026-10-14 22:20:32     300/763  13s
+2026-10-14 22:20:36     400/763  17s
+2026-10-14 22:20:46  (run stopped by hand and restarted with the order: baseline, Step 3 gate, variants; finished stages kept)
+2026-10-14 22:20:46  ==== run_green 
+2026-10-14 22:20:48  table: 763 rows, strict 609, checksum 2a66afb78a14db79 (reference run: 2a66afb78a14db79) MATCH
+2026-10-14 22:20:52  embed finbert_fp16 auditor_report: ProsusAI/finbert fp16 on cuda, first 200 sentences, 40650 sentences in 763 docs
+2026-10-14 22:21:03     0/763  1s
+2026-10-14 22:21:07     100/763  6s
+2026-10-14 22:21:12     200/763  10s
+2026-10-14 22:21:15     300/763  13s
+2026-10-14 22:21:19     400/763  17s
+2026-10-14 22:21:24     500/763  22s
+2026-10-14 22:21:29     600/763  27s
+2026-10-14 22:21:34     700/763  33s
+2026-10-14 22:21:38    [embed_finbert_fp16_auditor_report] 43s  1.62 Wh  1.16 g CO2e  GPU peak 463 MB  (codecarbon)
+2026-10-14 22:23:59    [dl_finbert_fp16_main_s0] 142s  5.59 Wh  3.98 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-14 22:23:59    dl_finbert_fp16_main_s0: PR 0.714 (142s)
+2026-10-14 22:26:23    [dl_finbert_fp16_main_s1] 143s  5.66 Wh  4.04 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-14 22:26:23    dl_finbert_fp16_main_s1: PR 0.733 (143s)
+2026-10-14 22:29:40    [dl_finbert_fp16_main_s2] 197s  7.83 Wh  5.59 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-14 22:29:40    dl_finbert_fp16_main_s2: PR 0.717 (198s)
+2026-10-14 22:34:17    [dl_finbert_fp16_main_s3] 276s  11.14 Wh  7.95 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-14 22:34:17    dl_finbert_fp16_main_s3: PR 0.716 (276s)
+2026-10-14 22:36:54    [dl_finbert_fp16_main_s4] 158s  6.20 Wh  4.43 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-14 22:36:54    dl_finbert_fp16_main_s4: PR 0.733 (158s)
+2026-10-14 22:39:46    [dl_finbert_fp16_main_s5] 171s  6.76 Wh  4.83 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-14 22:39:46    dl_finbert_fp16_main_s5: PR 0.690 (171s)
+2026-10-14 22:42:38    [dl_finbert_fp16_main_s6] 172s  6.72 Wh  4.79 g CO2e  GPU peak 152 MB  (codecarbon)
+2026-10-14 22:42:38    dl_finbert_fp16_main_s6: PR 0.723 (172s)
+2026-10-14 22:42:40    [gb_ratios] 2s  0.08 Wh  0.05 g CO2e  GPU peak 17 MB  (codecarbon)
+2026-10-14 22:42:40    gb_ratios: PR 0.747
+2026-10-14 22:42:43    [gb_both] 3s  0.07 Wh  0.05 g CO2e  GPU peak 17 MB  (codecarbon)
+2026-10-14 22:42:43    gb_both: PR 0.782
+2026-10-14 22:42:44    [gb_ratios_strict] 1s  0.05 Wh  0.04 g CO2e  GPU peak 17 MB  (codecarbon)
+2026-10-14 22:42:44    gb_ratios_strict: PR 0.776
+2026-10-14 22:42:46    [gb_both_strict] 2s  0.05 Wh  0.04 g CO2e  GPU peak 17 MB  (codecarbon)
+2026-10-14 22:42:46    gb_both_strict: PR 0.809
+2026-10-14 22:42:47    [cache_load_finbert_fp16_mdna] 1s  0.01 Wh  0.01 g CO2e  GPU peak 17 MB  (codecarbon)
+2026-10-14 22:42:47  baseline check (PR-AUC, all 763): gb_ratios 0.7475 vs 0.75 (ok); gb_both 0.782 vs 0.786 (ok); dl_finbert_fp16_k7 0.7546 vs 0.758 (ok); blend_finbert_fp16_k7 0.7915 vs 0.797 (ok)
+2026-10-14 22:45:15    [dl_finbert_fp16_strict_s0] 148s  5.82 Wh  4.15 g CO2e  GPU peak 151 MB  (codecarbon)
+2026-10-14 22:45:15    dl_finbert_fp16_strict_s0: PR 0.778 (148s)
+2026-10-14 22:46:58    [dl_finbert_fp16_strict_s1] 102s  4.03 Wh  2.88 g CO2e  GPU peak 151 MB  (codecarbon)
+2026-10-14 22:46:58    dl_finbert_fp16_strict_s1: PR 0.752 (102s)
+2026-10-14 22:49:09    [dl_finbert_fp16_strict_s2] 131s  5.20 Wh  3.71 g CO2e  GPU peak 151 MB  (codecarbon)
+2026-10-14 22:49:09    dl_finbert_fp16_strict_s2: PR 0.741 (131s)
+2026-10-14 22:51:47    [dl_finbert_fp16_strict_s3] 158s  6.26 Wh  4.47 g CO2e  GPU peak 151 MB  (codecarbon)
+2026-10-14 22:51:47    dl_finbert_fp16_strict_s3: PR 0.739 (158s)
+2026-10-14 22:55:02    [dl_finbert_fp16_strict_s4] 195s  7.64 Wh  5.45 g CO2e  GPU peak 151 MB  (codecarbon)
+2026-10-14 22:55:02    dl_finbert_fp16_strict_s4: PR 0.767 (195s)
+2026-10-14 22:57:01    [dl_finbert_fp16_strict_s5] 118s  4.55 Wh  3.25 g CO2e  GPU peak 151 MB  (codecarbon)
+2026-10-14 22:57:01    dl_finbert_fp16_strict_s5: PR 0.728 (118s)
+2026-10-14 22:59:39    [dl_finbert_fp16_strict_s6] 159s  6.19 Wh  4.41 g CO2e  GPU peak 151 MB  (codecarbon)
+2026-10-14 22:59:39    dl_finbert_fp16_strict_s6: PR 0.789 (159s)
+2026-10-14 22:59:41  embed finbert_fp32 mdna: ProsusAI/finbert fp32 on cuda, first 200 sentences, 77523 sentences in 763 docs
+2026-10-14 22:59:43     0/763  0s
+2026-10-14 23:00:00     100/763  17s
+2026-10-14 23:00:19     200/763  36s
+2026-10-14 23:00:35     300/763  52s
+2026-10-14 23:00:49     400/763  66s
+2026-10-14 23:01:10     500/763  88s
+2026-10-14 23:01:29     600/763  106s
+2026-10-14 23:01:50     700/763  127s
+2026-10-14 23:02:04    [embed_finbert_fp32_mdna] 142s  8.69 Wh  6.20 g CO2e  GPU peak 654 MB  (codecarbon)
+2026-10-14 23:02:19  embedding checks: {"fresh_vs_existing_cache": {"bitwise_identical": true, "max_abs_diff": 0.0, "mean_cos": 1.0}, "finbert_fp16_vs_fp32": {"mean_cos": 0.9999995827674866, "min_cos": 0.9999845027923584, "passes_0_99": true}}
+2026-10-14 23:04:19    [dl_finbert_fp32_main_s0] 120s  4.68 Wh  3.34 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-14 23:04:19    dl_finbert_fp32_main_s0: PR 0.695 (120s)
+2026-10-14 23:06:22    [dl_finbert_fp32_main_s1] 123s  4.74 Wh  3.38 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-14 23:06:22    dl_finbert_fp32_main_s1: PR 0.733 (123s)
+2026-10-14 23:09:04    [dl_finbert_fp32_main_s2] 163s  6.34 Wh  4.52 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-14 23:09:04    dl_finbert_fp32_main_s2: PR 0.724 (163s)
+2026-10-14 23:13:07    [dl_finbert_fp32_main_s3] 243s  9.53 Wh  6.80 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-14 23:13:07    dl_finbert_fp32_main_s3: PR 0.718 (243s)
+2026-10-14 23:15:39    [dl_finbert_fp32_main_s4] 152s  5.92 Wh  4.22 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-14 23:15:39    dl_finbert_fp32_main_s4: PR 0.734 (152s)
+2026-10-14 23:17:53    [dl_finbert_fp32_main_s5] 134s  5.23 Wh  3.73 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-14 23:17:53    dl_finbert_fp32_main_s5: PR 0.715 (134s)
+2026-10-14 23:19:53    [dl_finbert_fp32_main_s6] 120s  4.66 Wh  3.32 g CO2e  GPU peak 152 MB  (codecarbon)
+2026-10-14 23:19:53    dl_finbert_fp32_main_s6: PR 0.725 (120s)
+2026-10-14 23:19:55  embed finbert_bf16 mdna: ProsusAI/finbert bf16 on cuda, first 200 sentences, 77523 sentences in 763 docs
+2026-10-14 23:19:57     0/763  0s
+2026-10-14 23:20:04     100/763  8s
+2026-10-14 23:20:12     200/763  16s
+2026-10-14 23:20:19     300/763  23s
+2026-10-14 23:20:25     400/763  29s
+2026-10-14 23:20:34     500/763  38s
+2026-10-14 23:20:42     600/763  45s
+2026-10-14 23:20:50     700/763  54s
+2026-10-14 23:20:56    [embed_finbert_bf16_mdna] 61s  2.25 Wh  1.60 g CO2e  GPU peak 482 MB  (codecarbon)
+2026-10-14 23:21:00  embedding checks: {"fresh_vs_existing_cache": {"bitwise_identical": true, "max_abs_diff": 0.0, "mean_cos": 1.0}, "finbert_fp16_vs_fp32": {"mean_cos": 0.9999995827674866, "min_cos": 0.9999845027923584, "passes_0_99": true}, "finbert_bf16_vs_fp32": {"mean_cos": 0.9999778270721436, "min_cos": 0.9992133975028992, "passes_0_99": true}}
+2026-10-14 23:22:54    [dl_finbert_bf16_main_s0] 114s  4.42 Wh  3.15 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-14 23:22:54    dl_finbert_bf16_main_s0: PR 0.697 (114s)
+2026-10-14 23:25:03    [dl_finbert_bf16_main_s1] 129s  5.00 Wh  3.57 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-14 23:25:03    dl_finbert_bf16_main_s1: PR 0.735 (129s)
+2026-10-14 23:27:42    [dl_finbert_bf16_main_s2] 158s  6.15 Wh  4.39 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-14 23:27:42    dl_finbert_bf16_main_s2: PR 0.722 (159s)
+2026-10-14 23:30:59    [dl_finbert_bf16_main_s3] 198s  7.63 Wh  5.44 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-14 23:30:59    dl_finbert_bf16_main_s3: PR 0.720 (198s)
+2026-10-14 23:33:29    [dl_finbert_bf16_main_s4] 149s  5.85 Wh  4.17 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-14 23:33:29    dl_finbert_bf16_main_s4: PR 0.732 (149s)
+2026-10-14 23:36:22    [dl_finbert_bf16_main_s5] 173s  6.81 Wh  4.86 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-14 23:36:22    dl_finbert_bf16_main_s5: PR 0.715 (173s)
+2026-10-14 23:38:26    [dl_finbert_bf16_main_s6] 123s  4.79 Wh  3.42 g CO2e  GPU peak 152 MB  (codecarbon)
+2026-10-14 23:38:26    dl_finbert_bf16_main_s6: PR 0.724 (124s)
+2026-10-14 23:38:27  embed finbert_fp16_n32 mdna: ProsusAI/finbert fp16 on cuda, first 32 sentences, 21617 sentences in 763 docs
+2026-10-14 23:38:28     0/763  0s
+2026-10-14 23:38:31     100/763  2s
+2026-10-14 23:38:33     200/763  4s
+2026-10-14 23:38:35     300/763  6s
+2026-10-14 23:38:37     400/763  8s
+2026-10-14 23:38:39     500/763  10s
+2026-10-14 23:38:41     600/763  13s
+2026-10-14 23:38:43     700/763  15s
+2026-10-14 23:38:45    [embed_finbert_fp16_n32_mdna] 18s  0.70 Wh  0.50 g CO2e  GPU peak 482 MB  (codecarbon)
+2026-10-14 23:38:45  embedding checks: {"fresh_vs_existing_cache": {"bitwise_identical": true, "max_abs_diff": 0.0, "mean_cos": 1.0}, "finbert_fp16_vs_fp32": {"mean_cos": 0.9999995827674866, "min_cos": 0.9999845027923584, "passes_0_99": true}, "finbert_bf16_vs_fp32": {"mean_cos": 0.9999778270721436, "min_cos": 0.9992133975028992, "passes_0_99": true}, "n32_prefix_identical": false}
+2026-10-14 23:40:34    [dl_finbert_fp16_n32_main_s0] 109s  4.36 Wh  3.11 g CO2e  GPU peak 116 MB  (codecarbon)
+2026-10-14 23:40:34    dl_finbert_fp16_n32_main_s0: PR 0.737 (109s)
+2026-10-14 23:42:24    [dl_finbert_fp16_n32_main_s1] 110s  4.46 Wh  3.18 g CO2e  GPU peak 116 MB  (codecarbon)
+2026-10-14 23:42:24    dl_finbert_fp16_n32_main_s1: PR 0.729 (110s)
+2026-10-14 23:45:15    [dl_finbert_fp16_n32_main_s2] 171s  6.93 Wh  4.94 g CO2e  GPU peak 116 MB  (codecarbon)
+2026-10-14 23:45:16    dl_finbert_fp16_n32_main_s2: PR 0.723 (171s)
+2026-10-14 23:47:40    [dl_finbert_fp16_n32_main_s3] 144s  5.81 Wh  4.15 g CO2e  GPU peak 116 MB  (codecarbon)
+2026-10-14 23:47:40    dl_finbert_fp16_n32_main_s3: PR 0.711 (144s)
+2026-10-14 23:50:13    [dl_finbert_fp16_n32_main_s4] 153s  6.22 Wh  4.44 g CO2e  GPU peak 116 MB  (codecarbon)
+2026-10-14 23:50:13    dl_finbert_fp16_n32_main_s4: PR 0.686 (153s)
+2026-10-14 23:52:18    [dl_finbert_fp16_n32_main_s5] 125s  5.06 Wh  3.61 g CO2e  GPU peak 116 MB  (codecarbon)
+2026-10-14 23:52:18    dl_finbert_fp16_n32_main_s5: PR 0.709 (125s)
+2026-10-14 23:53:57    [dl_finbert_fp16_n32_main_s6] 100s  4.02 Wh  2.87 g CO2e  GPU peak 116 MB  (codecarbon)
+2026-10-14 23:53:57    dl_finbert_fp16_n32_main_s6: PR 0.736 (100s)
+2026-10-14 23:53:58  embed finbert_fp16_n64 mdna: ProsusAI/finbert fp16 on cuda, first 64 sentences, 39682 sentences in 763 docs
+2026-10-14 23:54:00     0/763  0s
+2026-10-14 23:54:04     100/763  4s
+2026-10-14 23:54:08     200/763  8s
+2026-10-14 23:54:11     300/763  11s
+2026-10-14 23:54:15     400/763  14s
+2026-10-14 23:54:19     500/763  18s
+2026-10-14 23:54:22     600/763  22s
+2026-10-14 23:54:26     700/763  26s
+2026-10-14 23:54:29    [embed_finbert_fp16_n64_mdna] 30s  1.26 Wh  0.90 g CO2e  GPU peak 481 MB  (codecarbon)
+2026-10-14 23:54:29  embedding checks: {"fresh_vs_existing_cache": {"bitwise_identical": true, "max_abs_diff": 0.0, "mean_cos": 1.0}, "finbert_fp16_vs_fp32": {"mean_cos": 0.9999995827674866, "min_cos": 0.9999845027923584, "passes_0_99": true}, "finbert_bf16_vs_fp32": {"mean_cos": 0.9999778270721436, "min_cos": 0.9992133975028992, "passes_0_99": true}, "n32_prefix_identical": false, "n64_prefix_identical": true}
+2026-10-14 23:56:28    [dl_finbert_fp16_n64_main_s0] 118s  4.62 Wh  3.30 g CO2e  GPU peak 135 MB  (codecarbon)
+2026-10-14 23:56:28    dl_finbert_fp16_n64_main_s0: PR 0.692 (118s)
+2026-10-14 23:58:19    [dl_finbert_fp16_n64_main_s1] 111s  4.32 Wh  3.08 g CO2e  GPU peak 135 MB  (codecarbon)
+2026-10-14 23:58:19    dl_finbert_fp16_n64_main_s1: PR 0.732 (111s)
+2026-10-15 00:01:16    [dl_finbert_fp16_n64_main_s2] 177s  6.98 Wh  4.98 g CO2e  GPU peak 135 MB  (codecarbon)
+2026-10-15 00:01:16    dl_finbert_fp16_n64_main_s2: PR 0.706 (177s)
+2026-10-15 00:03:58    [dl_finbert_fp16_n64_main_s3] 163s  6.43 Wh  4.59 g CO2e  GPU peak 135 MB  (codecarbon)
+2026-10-15 00:03:58    dl_finbert_fp16_n64_main_s3: PR 0.714 (163s)
+2026-10-15 00:06:25    [dl_finbert_fp16_n64_main_s4] 146s  5.81 Wh  4.15 g CO2e  GPU peak 135 MB  (codecarbon)
+2026-10-15 00:06:25    dl_finbert_fp16_n64_main_s4: PR 0.714 (146s)
+2026-10-15 00:08:49    [dl_finbert_fp16_n64_main_s5] 145s  5.68 Wh  4.06 g CO2e  GPU peak 135 MB  (codecarbon)
+2026-10-15 00:08:49    dl_finbert_fp16_n64_main_s5: PR 0.713 (145s)
+2026-10-15 00:10:44    [dl_finbert_fp16_n64_main_s6] 114s  4.52 Wh  3.22 g CO2e  GPU peak 136 MB  (codecarbon)
+2026-10-15 00:10:44    dl_finbert_fp16_n64_main_s6: PR 0.729 (114s)
+2026-10-15 00:10:45  embed finbert_fp16_n128 mdna: ProsusAI/finbert fp16 on cuda, first 128 sentences, 63234 sentences in 763 docs
+2026-10-15 00:10:47     0/763  0s
+2026-10-15 00:10:53     100/763  6s
+2026-10-15 00:10:59     200/763  12s
+2026-10-15 00:11:05     300/763  18s
+2026-10-15 00:11:09     400/763  22s
+2026-10-15 00:11:16     500/763  29s
+2026-10-15 00:11:22     600/763  35s
+2026-10-15 00:11:29     700/763  42s
+2026-10-15 00:11:33    [embed_finbert_fp16_n128_mdna] 48s  2.01 Wh  1.44 g CO2e  GPU peak 483 MB  (codecarbon)
+2026-10-15 00:11:34  embedding checks: {"fresh_vs_existing_cache": {"bitwise_identical": true, "max_abs_diff": 0.0, "mean_cos": 1.0}, "finbert_fp16_vs_fp32": {"mean_cos": 0.9999995827674866, "min_cos": 0.9999845027923584, "passes_0_99": true}, "finbert_bf16_vs_fp32": {"mean_cos": 0.9999778270721436, "min_cos": 0.9992133975028992, "passes_0_99": true}, "n32_prefix_identical": false, "n64_prefix_identical": true, "n128_prefix_identical": true}
+2026-10-15 00:11:34  dl finbert_fp16_n128: first 128 slots bit-identical to the full run and the network reads 96 -> reuses finbert_fp16 runs (no training)
+2026-10-15 00:11:35  embed findistilroberta_fp16 mdna: mrm8488/distilroberta-finetuned-financial-news-sentiment-analysis fp16 on cuda, first 200 sentences, 77523 sentences in 763 docs
+2026-10-15 00:11:38     0/763  0s
+2026-10-15 00:11:42     100/763  5s
+2026-10-15 00:11:47     200/763  10s
+2026-10-15 00:11:52     300/763  15s
+2026-10-15 00:11:56     400/763  19s
+2026-10-15 00:12:02     500/763  25s
+2026-10-15 00:12:08     600/763  30s
+2026-10-15 00:12:13     700/763  36s
+2026-10-15 00:12:17    [embed_findistilroberta_fp16_mdna] 42s  1.54 Wh  1.10 g CO2e  GPU peak 406 MB  (codecarbon)
+2026-10-15 00:12:17  embedding checks: {"fresh_vs_existing_cache": {"bitwise_identical": true, "max_abs_diff": 0.0, "mean_cos": 1.0}, "finbert_fp16_vs_fp32": {"mean_cos": 0.9999995827674866, "min_cos": 0.9999845027923584, "passes_0_99": true}, "finbert_bf16_vs_fp32": {"mean_cos": 0.9999778270721436, "min_cos": 0.9992133975028992, "passes_0_99": true}, "n32_prefix_identical": false, "n64_prefix_identical": true, "n128_prefix_identical": true}
+2026-10-15 00:14:47    [dl_findistilroberta_fp16_main_s0] 149s  5.69 Wh  4.06 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-15 00:14:47    dl_findistilroberta_fp16_main_s0: PR 0.707 (149s)
+2026-10-15 00:16:54    [dl_findistilroberta_fp16_main_s1] 127s  4.92 Wh  3.51 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-15 00:16:54    dl_findistilroberta_fp16_main_s1: PR 0.727 (127s)
+2026-10-15 00:19:49    [dl_findistilroberta_fp16_main_s2] 174s  6.81 Wh  4.86 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-15 00:19:49    dl_findistilroberta_fp16_main_s2: PR 0.742 (175s)
+2026-10-15 00:23:39    [dl_findistilroberta_fp16_main_s3] 230s  8.99 Wh  6.41 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-15 00:23:39    dl_findistilroberta_fp16_main_s3: PR 0.710 (230s)
+2026-10-15 00:26:50    [dl_findistilroberta_fp16_main_s4] 191s  7.44 Wh  5.31 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-15 00:26:50    dl_findistilroberta_fp16_main_s4: PR 0.725 (191s)
+2026-10-15 00:29:55    [dl_findistilroberta_fp16_main_s5] 185s  7.21 Wh  5.14 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-15 00:29:55    dl_findistilroberta_fp16_main_s5: PR 0.725 (185s)
+2026-10-15 00:31:57    [dl_findistilroberta_fp16_main_s6] 122s  4.70 Wh  3.36 g CO2e  GPU peak 152 MB  (codecarbon)
+2026-10-15 00:31:57    dl_findistilroberta_fp16_main_s6: PR 0.724 (122s)
+2026-10-15 00:31:58  embed minilm_fp16 mdna: sentence-transformers/all-MiniLM-L6-v2 fp16 on cuda, first 200 sentences, 77523 sentences in 763 docs
+2026-10-15 00:32:00     0/763  0s
+2026-10-15 00:32:05     100/763  5s
+2026-10-15 00:32:09     200/763  9s
+2026-10-15 00:32:13     300/763  13s
+2026-10-15 00:32:17     400/763  17s
+2026-10-15 00:32:22     500/763  22s
+2026-10-15 00:32:26     600/763  26s
+2026-10-15 00:32:31     700/763  31s
+2026-10-15 00:32:34    [embed_minilm_fp16_mdna] 35s  1.05 Wh  0.75 g CO2e  GPU peak 129 MB  (codecarbon)
+2026-10-15 00:32:34  embedding checks: {"fresh_vs_existing_cache": {"bitwise_identical": true, "max_abs_diff": 0.0, "mean_cos": 1.0}, "finbert_fp16_vs_fp32": {"mean_cos": 0.9999995827674866, "min_cos": 0.9999845027923584, "passes_0_99": true}, "finbert_bf16_vs_fp32": {"mean_cos": 0.9999778270721436, "min_cos": 0.9992133975028992, "passes_0_99": true}, "n32_prefix_identical": false, "n64_prefix_identical": true, "n128_prefix_identical": true}
+2026-10-15 00:34:29    [dl_minilm_fp16_main_s0] 115s  4.46 Wh  3.18 g CO2e  GPU peak 83 MB  (codecarbon)
+2026-10-15 00:34:29    dl_minilm_fp16_main_s0: PR 0.735 (115s)
+2026-10-15 00:36:20    [dl_minilm_fp16_main_s1] 111s  4.33 Wh  3.09 g CO2e  GPU peak 83 MB  (codecarbon)
+2026-10-15 00:36:20    dl_minilm_fp16_main_s1: PR 0.724 (111s)
+2026-10-15 00:38:17    [dl_minilm_fp16_main_s2] 117s  4.57 Wh  3.26 g CO2e  GPU peak 83 MB  (codecarbon)
+2026-10-15 00:38:17    dl_minilm_fp16_main_s2: PR 0.747 (117s)
+2026-10-15 00:40:46    [dl_minilm_fp16_main_s3] 149s  5.80 Wh  4.14 g CO2e  GPU peak 83 MB  (codecarbon)
+2026-10-15 00:40:46    dl_minilm_fp16_main_s3: PR 0.708 (149s)
+2026-10-15 00:42:32    [dl_minilm_fp16_main_s4] 105s  4.14 Wh  2.95 g CO2e  GPU peak 83 MB  (codecarbon)
+2026-10-15 00:42:32    dl_minilm_fp16_main_s4: PR 0.744 (105s)
+2026-10-15 00:44:39    [dl_minilm_fp16_main_s5] 127s  4.98 Wh  3.55 g CO2e  GPU peak 83 MB  (codecarbon)
+2026-10-15 00:44:39    dl_minilm_fp16_main_s5: PR 0.694 (127s)
+2026-10-15 00:46:46    [dl_minilm_fp16_main_s6] 127s  4.90 Wh  3.50 g CO2e  GPU peak 85 MB  (codecarbon)
+2026-10-15 00:46:46    dl_minilm_fp16_main_s6: PR 0.729 (128s)
+2026-10-15 00:46:48  embed distilroberta_fp16 mdna: distilroberta-base fp16 on cuda, first 200 sentences, 77523 sentences in 763 docs
+2026-10-15 00:46:51     0/763  0s
+2026-10-15 00:46:56     100/763  5s
+2026-10-15 00:47:01     200/763  10s
+2026-10-15 00:47:07     300/763  15s
+2026-10-15 00:47:10     400/763  19s
+2026-10-15 00:47:16     500/763  25s
+2026-10-15 00:47:22     600/763  31s
+2026-10-15 00:47:28     700/763  36s
+2026-10-15 00:47:31    [embed_distilroberta_fp16_mdna] 43s  1.54 Wh  1.10 g CO2e  GPU peak 409 MB  (codecarbon)
+2026-10-15 00:47:31  embedding checks: {"fresh_vs_existing_cache": {"bitwise_identical": true, "max_abs_diff": 0.0, "mean_cos": 1.0}, "finbert_fp16_vs_fp32": {"mean_cos": 0.9999995827674866, "min_cos": 0.9999845027923584, "passes_0_99": true}, "finbert_bf16_vs_fp32": {"mean_cos": 0.9999778270721436, "min_cos": 0.9992133975028992, "passes_0_99": true}, "n32_prefix_identical": false, "n64_prefix_identical": true, "n128_prefix_identical": true}
+2026-10-15 00:49:26    [dl_distilroberta_fp16_main_s0] 114s  4.41 Wh  3.14 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-15 00:49:26    dl_distilroberta_fp16_main_s0: PR 0.709 (114s)
+2026-10-15 00:51:37    [dl_distilroberta_fp16_main_s1] 131s  5.10 Wh  3.64 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-15 00:51:37    dl_distilroberta_fp16_main_s1: PR 0.732 (131s)
+2026-10-15 00:54:13    [dl_distilroberta_fp16_main_s2] 156s  6.04 Wh  4.31 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-15 00:54:13    dl_distilroberta_fp16_main_s2: PR 0.714 (156s)
+2026-10-15 00:57:21    [dl_distilroberta_fp16_main_s3] 188s  7.23 Wh  5.16 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-15 00:57:21    dl_distilroberta_fp16_main_s3: PR 0.745 (188s)
+2026-10-15 01:00:18    [dl_distilroberta_fp16_main_s4] 178s  6.93 Wh  4.95 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-15 01:00:18    dl_distilroberta_fp16_main_s4: PR 0.742 (178s)
+2026-10-15 01:02:54    [dl_distilroberta_fp16_main_s5] 155s  6.00 Wh  4.28 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-15 01:02:54    dl_distilroberta_fp16_main_s5: PR 0.708 (155s)
+2026-10-15 01:04:56    [dl_distilroberta_fp16_main_s6] 122s  4.72 Wh  3.36 g CO2e  GPU peak 152 MB  (codecarbon)
+2026-10-15 01:04:56    dl_distilroberta_fp16_main_s6: PR 0.724 (122s)
+2026-10-15 01:04:58  embed finbert_int8 mdna: ProsusAI/finbert int8 on cpu, first 200 sentences, 77523 sentences in 763 docs
+2026-10-15 01:05:04     0/763  3s
+2026-10-15 01:15:20     100/763  619s
+2026-10-15 01:26:38     200/763  1297s
+2026-10-15 01:36:21     300/763  1880s
+2026-10-15 01:44:29     400/763  2367s
+2026-10-15 01:57:25     500/763  3144s
+2026-10-15 02:08:40     600/763  3818s
+2026-10-15 02:21:11     700/763  4569s
+2026-10-15 02:28:35    [embed_finbert_int8_mdna] 5017s  191.83 Wh  136.86 g CO2e  GPU peak 17 MB  (codecarbon)
+2026-10-15 02:28:39  embedding checks: {"fresh_vs_existing_cache": {"bitwise_identical": true, "max_abs_diff": 0.0, "mean_cos": 1.0}, "finbert_fp16_vs_fp32": {"mean_cos": 0.9999995827674866, "min_cos": 0.9999845027923584, "passes_0_99": true}, "finbert_bf16_vs_fp32": {"mean_cos": 0.9999778270721436, "min_cos": 0.9992133975028992, "passes_0_99": true}, "n32_prefix_identical": false, "n64_prefix_identical": true, "n128_prefix_identical": true, "finbert_int8_vs_fp32": {"mean_cos": 0.7430314421653748, "min_cos": 0.4811820089817047, "passes_0_99": false}}
+2026-10-15 02:30:33    [dl_finbert_int8_main_s0] 114s  4.35 Wh  3.11 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-15 02:30:33    dl_finbert_int8_main_s0: PR 0.712 (114s)
+2026-10-15 02:32:43    [dl_finbert_int8_main_s1] 130s  5.01 Wh  3.57 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-15 02:32:43    dl_finbert_int8_main_s1: PR 0.727 (130s)
+2026-10-15 02:35:25    [dl_finbert_int8_main_s2] 163s  6.29 Wh  4.48 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-15 02:35:25    dl_finbert_int8_main_s2: PR 0.732 (163s)
+2026-10-15 02:39:54    [dl_finbert_int8_main_s3] 269s  10.58 Wh  7.54 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-15 02:39:54    dl_finbert_int8_main_s3: PR 0.723 (269s)
+2026-10-15 02:42:40    [dl_finbert_int8_main_s4] 166s  6.46 Wh  4.61 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-15 02:42:40    dl_finbert_int8_main_s4: PR 0.742 (166s)
+2026-10-15 02:45:41    [dl_finbert_int8_main_s5] 181s  7.05 Wh  5.03 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-15 02:45:41    dl_finbert_int8_main_s5: PR 0.703 (181s)
+2026-10-15 02:47:44    [dl_finbert_int8_main_s6] 123s  4.72 Wh  3.37 g CO2e  GPU peak 152 MB  (codecarbon)
+2026-10-15 02:47:44    dl_finbert_int8_main_s6: PR 0.721 (123s)
+2026-10-15 02:48:32    [infer_finbert_gpu_fp16_n200] 45s  1.70 Wh  1.21 g CO2e  GPU peak 359 MB  (codecarbon)
+2026-10-15 02:48:32    infer_finbert_gpu_fp16_n200: 212 docs, 213 ms/doc, 28.9 J/doc
+2026-10-15 02:49:21    [infer_finbert_gpu_fp32_n200] 45s  2.24 Wh  1.60 g CO2e  GPU peak 658 MB  (codecarbon)
+2026-10-15 02:49:21    infer_finbert_gpu_fp32_n200: 139 docs, 327 ms/doc, 58.1 J/doc
+2026-10-15 02:50:08    [infer_finbert_gpu_fp16_n96] 45s  1.68 Wh  1.20 g CO2e  GPU peak 346 MB  (codecarbon)
+2026-10-15 02:50:08    infer_finbert_gpu_fp16_n96: 242 docs, 188 ms/doc, 25.1 J/doc
+2026-10-15 02:50:56    [infer_finbert_gpu_fp16_n64] 45s  1.67 Wh  1.19 g CO2e  GPU peak 346 MB  (codecarbon)
+2026-10-15 02:50:56    infer_finbert_gpu_fp16_n64: 279 docs, 163 ms/doc, 21.6 J/doc
+2026-10-15 02:56:30    [infer_finbert_cpu_fp32_n200] 302s  12.67 Wh  9.04 g CO2e  GPU peak 17 MB  (codecarbon)
+2026-10-15 02:56:30    infer_finbert_cpu_fp32_n200: 40 docs, 7552 ms/doc, 1140.7 J/doc
+2026-10-15 03:01:36    [infer_finbert_cpu_int8_n200] 275s  10.53 Wh  7.51 g CO2e  GPU peak 17 MB  (codecarbon)
+2026-10-15 03:01:36    infer_finbert_cpu_int8_n200: 40 docs, 6872 ms/doc, 947.5 J/doc
+2026-10-15 03:04:49    [infer_finbert_cpu_int8_n96] 177s  6.93 Wh  4.95 g CO2e  GPU peak 17 MB  (codecarbon)
+2026-10-15 03:04:49    infer_finbert_cpu_int8_n96: 40 docs, 4428 ms/doc, 624.1 J/doc
+2026-10-15 03:05:36    [infer_minilm_gpu_fp16_n200] 45s  1.54 Wh  1.10 g CO2e  GPU peak 126 MB  (codecarbon)
+2026-10-15 03:05:36    infer_minilm_gpu_fp16_n200: 250 docs, 181 ms/doc, 22.1 J/doc
+2026-10-15 03:06:44    [infer_minilm_cpu_fp32_n200] 61s  2.62 Wh  1.87 g CO2e  GPU peak 17 MB  (codecarbon)
+2026-10-15 03:06:44    infer_minilm_cpu_fp32_n200: 40 docs, 1537 ms/doc, 235.8 J/doc
+2026-10-15 03:07:51    [infer_minilm_cpu_int8_n200] 59s  2.43 Wh  1.74 g CO2e  GPU peak 17 MB  (codecarbon)
+2026-10-15 03:07:51    infer_minilm_cpu_int8_n200: 40 docs, 1472 ms/doc, 219.0 J/doc
+2026-10-15 03:10:33    [infer_findistilroberta_cpu_int8_n200] 144s  5.51 Wh  3.93 g CO2e  GPU peak 17 MB  (codecarbon)
+2026-10-15 03:10:33    infer_findistilroberta_cpu_int8_n200: 40 docs, 3588 ms/doc, 496.0 J/doc
+2026-10-15 03:13:19    [infer_distilroberta_cpu_int8_n200] 147s  5.61 Wh  4.00 g CO2e  GPU peak 17 MB  (codecarbon)
+2026-10-15 03:13:19    infer_distilroberta_cpu_int8_n200: 40 docs, 3672 ms/doc, 505.2 J/doc
+2026-10-15 03:14:04    [infer_gb_only_cpu] 45s  1.91 Wh  1.36 g CO2e  GPU peak 17 MB  (codecarbon)
+2026-10-15 03:14:04    infer_gb_only_cpu: 22993 docs, 2 ms/doc, 0.3 J/doc
+2026-10-15 03:14:04  ==== done in 293.3 min
+2026-10-15 03:15:55  re-measuring the stages that overlapped a stray whole-disk find (DECISIONS.md D4.2)
+2026-10-15 03:15:56  ==== run_green --only finbert_fp16 --stages table,embed,dl,gb
+2026-10-15 03:15:57  table build (incl. fold-wise trigram-LM perplexity)
+2026-10-15 03:17:46    [table_build] 103s  1.80 Wh  1.29 g CO2e  GPU peak 0 MB  (codecarbon)
+2026-10-15 03:17:46  table: 763 rows, strict 609, checksum 2a66afb78a14db79 (reference run: 2a66afb78a14db79) MATCH
+2026-10-15 03:17:48  embed finbert_fp16 mdna: ProsusAI/finbert fp16 on cuda, first 200 sentences, 77523 sentences in 763 docs
+2026-10-15 03:17:54     0/763  1s
+2026-10-15 03:18:01     100/763  8s
+2026-10-15 03:18:10     200/763  16s
+2026-10-15 03:18:17     300/763  23s
+2026-10-15 03:18:22     400/763  29s
+2026-10-15 03:18:31     500/763  38s
+2026-10-15 03:18:39     600/763  46s
+2026-10-15 03:18:48     700/763  54s
+2026-10-15 03:18:53    [embed_finbert_fp16_mdna] 65s  2.55 Wh  1.82 g CO2e  GPU peak 463 MB  (codecarbon)
+2026-10-15 03:18:55  embed finbert_fp16 auditor_report: ProsusAI/finbert fp16 on cuda, first 200 sentences, 40650 sentences in 763 docs
+2026-10-15 03:18:56     0/763  0s
+2026-10-15 03:19:00     100/763  4s
+2026-10-15 03:19:05     200/763  9s
+2026-10-15 03:19:08     300/763  12s
+2026-10-15 03:19:12     400/763  16s
+2026-10-15 03:19:17     500/763  21s
+2026-10-15 03:19:22     600/763  26s
+2026-10-15 03:19:27     700/763  31s
+2026-10-15 03:19:30    [embed_finbert_fp16_auditor_report] 36s  1.46 Wh  1.04 g CO2e  GPU peak 473 MB  (codecarbon)
+2026-10-15 03:21:31    [dl_finbert_fp16_main_s0] 120s  4.61 Wh  3.29 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-15 03:21:31    dl_finbert_fp16_main_s0: PR 0.714 (121s)
+2026-10-15 03:23:35    [dl_finbert_fp16_main_s1] 124s  4.77 Wh  3.40 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-15 03:23:35    dl_finbert_fp16_main_s1: PR 0.733 (124s)
+2026-10-15 03:26:24    [dl_finbert_fp16_main_s2] 169s  6.56 Wh  4.68 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-15 03:26:24    dl_finbert_fp16_main_s2: PR 0.717 (170s)
+2026-10-15 03:29:59    [dl_finbert_fp16_main_s3] 214s  8.28 Wh  5.91 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-15 03:29:59    dl_finbert_fp16_main_s3: PR 0.716 (214s)
+2026-10-15 03:32:37    [dl_finbert_fp16_main_s4] 158s  6.25 Wh  4.46 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-15 03:32:37    dl_finbert_fp16_main_s4: PR 0.733 (158s)
+2026-10-15 03:35:12    [dl_finbert_fp16_main_s5] 155s  6.05 Wh  4.32 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-15 03:35:12    dl_finbert_fp16_main_s5: PR 0.690 (155s)
+2026-10-15 03:37:57    [dl_finbert_fp16_main_s6] 165s  6.45 Wh  4.60 g CO2e  GPU peak 152 MB  (codecarbon)
+2026-10-15 03:37:57    dl_finbert_fp16_main_s6: PR 0.723 (165s)
+2026-10-15 03:40:11    [dl_finbert_fp16_strict_s0] 134s  5.25 Wh  3.75 g CO2e  GPU peak 151 MB  (codecarbon)
+2026-10-15 03:40:11    dl_finbert_fp16_strict_s0: PR 0.778 (134s)
+2026-10-15 03:41:46    [dl_finbert_fp16_strict_s1] 94s  3.66 Wh  2.61 g CO2e  GPU peak 151 MB  (codecarbon)
+2026-10-15 03:41:46    dl_finbert_fp16_strict_s1: PR 0.752 (94s)
+2026-10-15 03:43:50    [dl_finbert_fp16_strict_s2] 124s  4.86 Wh  3.47 g CO2e  GPU peak 151 MB  (codecarbon)
+2026-10-15 03:43:50    dl_finbert_fp16_strict_s2: PR 0.741 (124s)
+2026-10-15 03:46:23    [dl_finbert_fp16_strict_s3] 153s  6.06 Wh  4.32 g CO2e  GPU peak 151 MB  (codecarbon)
+2026-10-15 03:46:23    dl_finbert_fp16_strict_s3: PR 0.739 (154s)
+2026-10-15 03:46:25    [gb_ratios] 2s  0.06 Wh  0.04 g CO2e  GPU peak 17 MB  (codecarbon)
+2026-10-15 03:46:25    gb_ratios: PR 0.747
+2026-10-15 03:46:28    [gb_both] 2s  0.05 Wh  0.03 g CO2e  GPU peak 17 MB  (codecarbon)
+2026-10-15 03:46:28    gb_both: PR 0.782
+2026-10-15 03:46:29    [gb_ratios_strict] 1s  0.04 Wh  0.03 g CO2e  GPU peak 17 MB  (codecarbon)
+2026-10-15 03:46:29    gb_ratios_strict: PR 0.776
+2026-10-15 03:46:31    [gb_both_strict] 2s  0.06 Wh  0.04 g CO2e  GPU peak 17 MB  (codecarbon)
+2026-10-15 03:46:31    gb_both_strict: PR 0.809
+2026-10-15 03:46:32    [cache_load_finbert_fp16_mdna] 1s  0.01 Wh  0.01 g CO2e  GPU peak 17 MB  (codecarbon)
+2026-10-15 03:46:32  ==== done in 30.6 min
+2026-10-16 17:37:12  ==== run_green --only finbert_fp16_n96 --stages embed,check
+2026-10-16 17:37:14  table: 763 rows, strict 609, checksum 2a66afb78a14db79 (reference run: 2a66afb78a14db79) MATCH
+2026-10-16 17:37:18  embed finbert_fp16_n96 mdna: ProsusAI/finbert fp16 on cuda, first 96 sentences, 53001 sentences in 763 docs
+2026-10-16 17:37:28     0/763  1s
+2026-10-16 17:37:34     100/763  6s
+2026-10-16 17:37:40     200/763  12s
+2026-10-16 17:37:45     300/763  17s
+2026-10-16 17:37:49     400/763  22s
+2026-10-16 17:37:55     500/763  28s
+2026-10-16 17:38:01     600/763  33s
+2026-10-16 17:38:07     700/763  39s
+2026-10-16 17:38:11    [embed_finbert_fp16_n96_mdna] 50s  1.94 Wh  1.38 g CO2e  GPU peak 463 MB  (codecarbon)
+2026-10-16 17:38:11  embedding checks: {"fresh_vs_existing_cache": {"bitwise_identical": true, "max_abs_diff": 0.0, "mean_cos": 1.0}, "finbert_fp16_vs_fp32": {"mean_cos": 0.9999995827674866, "min_cos": 0.9999845027923584, "passes_0_99": true}, "finbert_bf16_vs_fp32": {"mean_cos": 0.9999778270721436, "min_cos": 0.9992133975028992, "passes_0_99": true}, "n32_prefix_identical": false, "n64_prefix_identical": true, "n128_prefix_identical": true, "finbert_int8_vs_fp32": {"mean_cos": 0.7430314421653748, "min_cos": 0.4811820089817047, "passes_0_99": false}, "n96_prefix_identical": false}
+2026-10-16 17:38:11  ==== done in 1.0 min
+2026-10-16 17:39:29  ==== run_green --only finbert_fp16_n96 --stages dl
+2026-10-16 17:39:31  table: 763 rows, strict 609, checksum 2a66afb78a14db79 (reference run: 2a66afb78a14db79) MATCH
+2026-10-16 17:42:05    [dl_finbert_fp16_n96_main_s0] 149s  5.73 Wh  4.09 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-16 17:42:05    dl_finbert_fp16_n96_main_s0: PR 0.715 (151s)
+2026-10-16 17:44:13    [dl_finbert_fp16_n96_main_s1] 128s  4.94 Wh  3.52 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-16 17:44:13    dl_finbert_fp16_n96_main_s1: PR 0.733 (128s)
+2026-10-16 17:47:09    [dl_finbert_fp16_n96_main_s2] 176s  6.87 Wh  4.90 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-16 17:47:09    dl_finbert_fp16_n96_main_s2: PR 0.717 (176s)
+2026-10-16 17:50:36    [dl_finbert_fp16_n96_main_s3] 207s  8.02 Wh  5.72 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-16 17:50:36    dl_finbert_fp16_n96_main_s3: PR 0.720 (207s)
+2026-10-16 17:53:27    [dl_finbert_fp16_n96_main_s4] 171s  6.70 Wh  4.78 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-16 17:53:27    dl_finbert_fp16_n96_main_s4: PR 0.746 (171s)
+2026-10-16 17:56:01    [dl_finbert_fp16_n96_main_s5] 153s  5.95 Wh  4.25 g CO2e  GPU peak 149 MB  (codecarbon)
+2026-10-16 17:56:01    dl_finbert_fp16_n96_main_s5: PR 0.690 (153s)
+2026-10-16 17:58:37    [dl_finbert_fp16_n96_main_s6] 156s  6.02 Wh  4.29 g CO2e  GPU peak 151 MB  (codecarbon)
+2026-10-16 17:58:37    dl_finbert_fp16_n96_main_s6: PR 0.723 (156s)
+2026-10-16 17:58:37  ==== done in 19.1 min

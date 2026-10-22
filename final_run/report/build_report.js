@@ -46,7 +46,7 @@ add(new Paragraph({ children: [new TextRun({ text: "FINAL REPORT", bold: true, s
     ["**Report date**", "3 October 2026"],
     ["**Stage**", "Complete: data, models, evaluation, the checks promised in the progress report of 1 October 2026, and a tool that scores a new company's annual report"],
     ["**Data**", "135 matched pairs, 1,154 annual reports read, 763 company-years modelled (362 that later entered insolvency, 401 healthy)"],
-    ["**Code and data**", "github.com/ananya-baweja/bankruptcy-prediction; the dataset folder processed/; the final-run scripts and every saved prediction in final_run/ (Section 12)"],
+    ["**Code and data**", "github.com/ananya-baweja/bankruptcy-prediction; the dataset folder processed/; the final-run scripts and every saved prediction in final_run/ (Section 13)"],
   ], [1, 4]));
 
 // ============================================================== summary
@@ -91,7 +91,7 @@ add(Tbl(["Term", "Meaning"], [
 
 // ============================================================== 2 literature
 add(H1("2. Literature Reviewed"));
-add(P("Ten studies shaped the design; each fixed a baseline, a feature, a model choice or a risk to control. Four standard method papers and the statistical references are listed with them in Section 13."));
+add(P("Ten studies shaped the design; each fixed a baseline, a feature, a model choice or a risk to control. Four standard method papers and the statistical references are listed with them in Section 14."));
 add(TableTitle("Table 2.", "The ten studies and what was taken from each."));
 add(Tbl(["#", "Study", "What it found", "What the project took from it"], [
   ["1", "Altman (1968), *Journal of Finance*", "Five ratios combined by discriminant analysis separate bankrupt and healthy US firms.", "The classical benchmark; its emerging-market form Z″ is a baseline and a feature."],
@@ -357,7 +357,7 @@ add(Tbl(["", "Typical of insolvent companies", "Typical of healthy companies"], 
   ["**Auditor's report**", lexrows(LEXA, 18), lexrowsH(LEXA, 12)],
 ], [0.9, 3.2, 2.4], { size: 17 }));
 const cLL = cmp("all", "hgb_lang_lex - hgb_lang"), cLB = cmp("all", "hgb_both_lex - hgb_both");
-add(P(`The lists read sensibly. Among the highest-ranked terms, insolvent companies' auditors write "qualified opinion", "unable to comment", "accumulated losses", "net worth", "eroded", "lenders", "interest on" and "not provided"; their management writes about a "net loss", "lenders", a "downward trend" and "fluctuating" and "difficult" conditions. Healthy companies' management discusses its "interest coverage", "operating profit", "credit rating" and "margin", and their auditors' reports carry more of the standard wording of the modern audit report ("overview", "ICAI firm", "judgements"). Some generic phrases also rank highly, a reminder that the lists are statistical associations to be read with care. Used as a fold-safe score, the lexicon is a strong single text signal for the auditor's report (ROC-AUC ${f3(pf("all", "lexicon_aud").roc)}), changes the language-only model by ${s3(cLL.diff)} PR-AUC (interval ${s3(cLL.boot.lo)} to ${s3(cLL.boot.hi)}; DeLong p = ${pv(cLL.delong.p)}) and adds ${s3(cLB.diff)} once ratios are present (${cLB.wins} of 5 folds; interval ${s3(cLB.boot.lo)} to ${s3(cLB.boot.hi)}): small, and not distinguishable from zero. The full ranked lists are released with the project (Section 12).`));
+add(P(`The lists read sensibly. Among the highest-ranked terms, insolvent companies' auditors write "qualified opinion", "unable to comment", "accumulated losses", "net worth", "eroded", "lenders", "interest on" and "not provided"; their management writes about a "net loss", "lenders", a "downward trend" and "fluctuating" and "difficult" conditions. Healthy companies' management discusses its "interest coverage", "operating profit", "credit rating" and "margin", and their auditors' reports carry more of the standard wording of the modern audit report ("overview", "ICAI firm", "judgements"). Some generic phrases also rank highly, a reminder that the lists are statistical associations to be read with care. Used as a fold-safe score, the lexicon is a strong single text signal for the auditor's report (ROC-AUC ${f3(pf("all", "lexicon_aud").roc)}), changes the language-only model by ${s3(cLL.diff)} PR-AUC (interval ${s3(cLL.boot.lo)} to ${s3(cLL.boot.hi)}; DeLong p = ${pv(cLL.delong.p)}) and adds ${s3(cLB.diff)} once ratios are present (${cLB.wins} of 5 folds; interval ${s3(cLB.boot.lo)} to ${s3(cLB.boot.hi)}): small, and not distinguishable from zero. The full ranked lists are released with the project (Section 13).`));
 
 // ---- 7.10 nulls
 add(H2("7.10 Negative and null results"));
@@ -420,14 +420,19 @@ add(Tbl(["Company and report", "What happened", "Risk score", "Band", "What the 
 add(Figure(`${FIG}/fig10_scorecard.png`, 6.0, "Figure 10. The score card for SEL Manufacturing's FY2017 report (top of the page)."));
 add(P(`The two correct calls behave as intended: SEL Manufacturing, a year before admission, is flagged on its auditor's qualified opinion and its loan default, both quoted; Rane (Madras) scores below most healthy companies. JVL Agro is a miss, and the card says why it may be one: only ${SC.jvl_aud_chars.toLocaleString("en-US")} characters of its auditor's report were found and the opinion could not be identified, so the strongest family of features was largely missing. A score is a ranking against the study's sample, not a probability: the sample is one insolvent company for every healthy one, while insolvency is far rarer among listed companies.`));
 
-// ============================================================== 11 conclusion
-add(H1("11. Conclusion"));
+// ============================================================== 11 green AI
+const GREEN = require("./green_section.js");
+if (GREEN.available()) add(GREEN.build(L, { num: 11, tableNo: 22, figNo: 11 }));
+else add(H1("11. Green AI: accuracy versus energy cost"), P("[results/green/ not found: run final_run/run_green.py and green_report.py]"));
+
+// ============================================================== 12 conclusion
+add(H1("12. Conclusion"));
 add(P(DL ? (NARR.conclusion || PEND) : PEND));
 
-// ============================================================== 12 reproducibility
-add(H1("12. Reproducibility"));
+// ============================================================== 13 reproducibility
+add(H1("13. Reproducibility"));
 add(P(`Everything in this report can be regenerated from the dataset folder and the files below. The folds are fixed in a file, the deep-learning run checks that it has built the identical table (checksum ${T.dl_run_info.table_checksum}), and every out-of-fold prediction is saved so that any table can be recomputed without retraining.`));
-add(TableTitle("Table 22.", "Files of the final run (folder final_run/ in the project directory)."));
+add(TableTitle("Table 24.", "Files of the final run (folder final_run/ in the project directory)."));
 add(Tbl(["File", "What it is"], [
   ["bpp_final/run_gpu.py, bppfinal/dl.py, bppfinal/table.py", "The deep-learning run: table, FinBERT embeddings, 45 network runs (resumable; 178 minutes on an RTX 5060 Ti; after the CARO correction the 30 runs that read the language features were repeated in 75 minutes and the 15 text-only runs reused)"],
   ["bpp_final/data_v2/language_features.csv", "The language features with the corrected CARO flags (the only file of the dataset that changed)"],
@@ -439,11 +444,12 @@ add(Tbl(["File", "What it is"], [
   ["analysis/results_cpu/, analysis/results_final/", "Out-of-fold predictions of every model (all_oof.csv), tables.json, importance, the released lexicons (contribution C)"],
   ["report/build_report.js, make_narrative.py, charts.py, diagrams.py", "This document and its figures, generated from tables.json"],
   ["score.py, scorer/, train_final.py, train_final_dl.py, gpu_v2/final_models/", "The scoring tool of Section 10 and the final models it loads"],
+  ["run_green.py, green_report.py, bppfinal/green.py, results/green/", "The Green AI study of Section 11: energy-measured runs (resumable), the comparison table, the Pareto figure, the selection and its decisions log"],
   ["handcheck/", "Every CARO flag the correction changed, and a sample it did not, with the sentence the rule read, for checking by hand"],
 ], [2.6, 3.4], { size: 18 }));
 
-// ============================================================== 12 references
-add(H1("13. References"));
+// ============================================================== 14 references
+add(H1("14. References"));
 [
   "[1] Altman, E. I. (1968). Financial ratios, discriminant analysis and the prediction of corporate bankruptcy. The Journal of Finance, 23(4), 589–609.",
   "[2] Loughran, T., & McDonald, B. (2011). When is a liability not a liability? Textual analysis, dictionaries, and 10-Ks. The Journal of Finance, 66(1), 35–65.",

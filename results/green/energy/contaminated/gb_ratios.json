@@ -1,0 +1,18 @@
+{
+ "stage": "gb_ratios",
+ "wall_s": 1.9160735607147217,
+ "n_features": 11,
+ "method": "codecarbon",
+ "energy_kwh": 7.659611358761561e-05,
+ "kg_co2e": 5.464680787406207e-05,
+ "cpu_kwh": 6.027227658907579e-05,
+ "gpu_kwh": 1.1001675467997574e-05,
+ "ram_kwh": 5.322161530542265e-06,
+ "cpu_power_w": 89.71870583900001,
+ "gpu_power_w": 13.793760970891112,
+ "cpu_model": "Intel(R) Core(TM) i9-7900X CPU @ 3.30GHz",
+ "gpu_model": "1 x NVIDIA GeForce RTX 5060 Ti",
+ "gpu_kwh_smi": 1.1716139353646172e-05,
+ "cpu_util_mean": 80.35,
+ "gpu_peak_mem_mb": 17.25
+}

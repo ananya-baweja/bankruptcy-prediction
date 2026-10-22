@@ -1,0 +1,144 @@
+{
+ "rule": "lowest GPU kWh (NVML) with pr_all >= 0.797-0.01 or bootstrap CI vs current blend containing 0",
+ "energy_metric": "gpu_kwh",
+ "chosen": "gb_both",
+ "label": "GB, ratios + language (no neural model)",
+ "reason": "bootstrap CI vs current blend includes 0; energy tie within 5% with gb_ratios, broken by PR-AUC",
+ "current": "blend_finbert_fp16_k7",
+ "chosen_metrics": {
+  "roc_all": 0.8017714572011492,
+  "roc_all_sd": 0.06288445730730742,
+  "pr_all": 0.7819819846182892,
+  "pr_all_sd": 0.07327409362776031,
+  "roc_strict": 0.812126411113493,
+  "roc_strict_sd": 0.05879915584175741,
+  "pr_strict": 0.8103147368763957,
+  "pr_strict_sd": 0.07346359538548144,
+  "gpu_kwh": 0.00020610655377395481,
+  "gpu_kg_co2e": 0.0001470448658310441,
+  "gpu_kwh_smi": 0.000222837843649586,
+  "kwh_total_ub": 0.0018497307009081932,
+  "kg_co2e_total_ub": 0.0013196737209866423,
+  "wall_s": 105.68498682975769
+ },
+ "current_metrics": {
+  "roc_all": 0.8079084303544221,
+  "roc_all_sd": 0.053243242899238076,
+  "pr_all": 0.7915438849583847,
+  "pr_all_sd": 0.06833624197936,
+  "roc_strict": 0.82024278196085,
+  "roc_strict_sd": 0.04465841522614971,
+  "pr_strict": 0.8268598321880061,
+  "pr_strict_sd": 0.06321841743099639,
+  "gpu_kwh": 0.008734742821121938,
+  "gpu_kg_co2e": 0.006231723653044056,
+  "gpu_kwh_smi": 0.008826930673544937,
+  "kwh_total_ub": 0.047377759457135446,
+  "kg_co2e_total_ub": 0.033801236084858174,
+  "wall_s": 1276.540943622589
+ },
+ "pr_diff": -0.00956190034009552,
+ "bootstrap": {
+  "point": -0.010741586453404728,
+  "lo": -0.0353924268094688,
+  "hi": 0.014777445988568368,
+  "n_boot": 2000
+ },
+ "wilcoxon": {
+  "diff": -0.009561900340095453,
+  "t_p": 0.34385751852621677,
+  "wilcoxon_p": 0.3125,
+  "wins": 1,
+  "n": 5,
+  "folds": [
+   0.0120718523421105,
+   -0.00161962873822874,
+   -0.0028801264396787207,
+   -0.014341270653502547,
+   -0.04104032821117776
+  ]
+ },
+ "wilcoxon_roc": {
+  "diff": -0.006136973153272862,
+  "t_p": 0.25274804424499975,
+  "wilcoxon_p": 0.3125,
+  "wins": 1,
+  "n": 5,
+  "folds": [
+   0.00934499314128956,
+   -0.016335956209373892,
+   -0.013698630136986356,
+   -0.0019097222222221877,
+   -0.008085550339071435
+  ]
+ },
+ "energy_saving_pct": 97.64038211548075,
+ "energy_multiple": 42.37974320167264,
+ "co2_saving_pct": 97.64038211548075,
+ "co2_multiple": 42.37974320167263,
+ "total_upper_bound": {
+  "saving_pct": 96.09578265814423,
+  "multiple": 25.61332816386385,
+  "note": "whole-machine codecarbon totals; CPU share inflated by background load (D4.3)"
+ },
+ "strict_trained_baseline": {
+  "dl_strict_trained": {
+   "roc_strict": 0.7745346367487385,
+   "roc_strict_sd": 0.025663567698710844,
+   "pr_strict": 0.7854611310559394,
+   "pr_strict_sd": 0.05053298246468774,
+   "gpu_kwh": 0.007868800183923996,
+   "gpu_kg_co2e": 0.005613924672018919,
+   "kwh_total_ub": 0.042546119104481514,
+   "kg_co2e_total_ub": 0.030354145760020396
+  },
+  "blend_strict_trained": {
+   "roc_strict": 0.8125355469484722,
+   "roc_strict_sd": 0.03379408130892224,
+   "pr_strict": 0.8180499969093521,
+   "pr_strict_sd": 0.04117810118718614,
+   "gpu_kwh": 0.007879654359273985,
+   "gpu_kg_co2e": 0.005621668485734791,
+   "kwh_total_ub": 0.04260654604934076,
+   "kg_co2e_total_ub": 0.030397256819987725
+  }
+ },
+ "n_configs": 82,
+ "n_eligible": 39,
+ "caching": {
+  "metric": "gpu_kwh",
+  "embed_mdna_kwh": 0.0014619964473739921,
+  "embed_auditor_kwh": 0.0008476292892140025,
+  "cache_load_kwh": 3.3919471580101668e-06,
+  "main_7_seeds": {
+   "cached_kwh": 0.0014857400774800633,
+   "reembed_kwh": 0.010233975131617945,
+   "saved_kwh": 0.008748235054137882
+  },
+  "full_grid": {
+   "n_runs": 45,
+   "cached_kwh": 0.002462263358698452,
+   "reembed_kwh": 0.060812479205499814,
+   "saved_kwh": 0.05835021584680136
+  },
+  "auditor_not_used_by_blend_kwh": 0.0008476292892140025
+ },
+ "caching_total_upper_bound": {
+  "metric": "energy_kwh",
+  "embed_mdna_kwh": 0.00254883094274263,
+  "embed_auditor_kwh": 0.0014603947109747756,
+  "cache_load_kwh": 1.3794320484733885e-05,
+  "main_7_seeds": {
+   "cached_kwh": 0.002645391186135767,
+   "reembed_kwh": 0.01784181659919841,
+   "saved_kwh": 0.015196425413062643
+  },
+  "full_grid": {
+   "n_runs": 45,
+   "cached_kwh": 0.004629970075530431,
+   "reembed_kwh": 0.10567282250177441,
+   "saved_kwh": 0.10104285242624399
+  },
+  "auditor_not_used_by_blend_kwh": 0.0014603947109747756
+ }
+}

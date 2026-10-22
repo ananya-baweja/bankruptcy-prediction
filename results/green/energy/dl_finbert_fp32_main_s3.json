@@ -1,0 +1,20 @@
+{
+ "stage": "dl_finbert_fp32_main_s3",
+ "wall_s": 242.64037036895752,
+ "config": "finbert_fp32",
+ "experiment": "main",
+ "seed": 3,
+ "method": "codecarbon",
+ "energy_kwh": 0.009525609424327099,
+ "kg_co2e": 0.00679596031330135,
+ "cpu_kwh": 0.00733368242824073,
+ "gpu_kwh": 0.0015202931606780046,
+ "ram_kwh": 0.0006716338354083644,
+ "cpu_power_w": 108.74135224985247,
+ "gpu_power_w": 22.52303387317892,
+ "cpu_model": "Intel(R) Core(TM) i9-7900X CPU @ 3.30GHz",
+ "gpu_model": "1 x NVIDIA GeForce RTX 5060 Ti",
+ "gpu_kwh_smi": 0.0015360430228369103,
+ "cpu_util_mean": 90.87407407407407,
+ "gpu_peak_mem_mb": 149.4287109375
+}

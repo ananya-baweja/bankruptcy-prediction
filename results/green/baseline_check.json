@@ -1,0 +1,26 @@
+{
+ "gb_ratios": {
+  "expected": 0.75,
+  "got": 0.7475,
+  "diff": -0.0025,
+  "ok": true
+ },
+ "gb_both": {
+  "expected": 0.786,
+  "got": 0.782,
+  "diff": -0.004,
+  "ok": true
+ },
+ "dl_finbert_fp16_k7": {
+  "expected": 0.758,
+  "got": 0.7546,
+  "diff": -0.0034,
+  "ok": true
+ },
+ "blend_finbert_fp16_k7": {
+  "expected": 0.797,
+  "got": 0.7915,
+  "diff": -0.0055,
+  "ok": true
+ }
+}
