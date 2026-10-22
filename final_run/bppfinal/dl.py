@@ -200,7 +200,7 @@ class Trainer:
         Lva = DataLoader(dataset(va), batch_size=128)
         Lte = DataLoader(dataset(te), batch_size=128)
         model = FusionNet(self.Xl.shape[1], self.Xr.shape[1], cfg["gru"], cfg["block"], cfg["attn_hidden"],
-                          cfg["drop"], streams=streams).to(self.dev)
+                          cfg["drop"], dim=E.shape[-1], streams=streams).to(self.dev)
         opt = torch.optim.AdamW(model.parameters(), lr=cfg["lr"], weight_decay=cfg["wd"])
 
         def infer(loader, full=False):

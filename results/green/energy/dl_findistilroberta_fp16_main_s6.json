@@ -1,0 +1,20 @@
+{
+ "stage": "dl_findistilroberta_fp16_main_s6",
+ "wall_s": 122.03345680236816,
+ "config": "findistilroberta_fp16",
+ "experiment": "main",
+ "seed": 6,
+ "method": "codecarbon",
+ "energy_kwh": 0.004703082133285011,
+ "kg_co2e": 0.003355371620252992,
+ "cpu_kwh": 0.003598746413122189,
+ "gpu_kwh": 0.0007665025576459872,
+ "ram_kwh": 0.00033783316251683566,
+ "cpu_power_w": 105.7028575044878,
+ "gpu_power_w": 22.493961021001684,
+ "cpu_model": "Intel(R) Core(TM) i9-7900X CPU @ 3.30GHz",
+ "gpu_model": "1 x NVIDIA GeForce RTX 5060 Ti",
+ "gpu_kwh_smi": 0.0007743493906209865,
+ "cpu_util_mean": 89.7959349593496,
+ "gpu_peak_mem_mb": 151.8388671875
+}

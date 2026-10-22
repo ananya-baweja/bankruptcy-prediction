@@ -29,6 +29,16 @@ The full system beats the ratios alone in all five folds (+0.059; pair-bootstrap
 healthy (Altman Z'' above the median: +0.164). The auditor's report carries more of the signal than
 management's MD&A. Details, tests and limitations: the final report.
 
+## Green AI
+
+Every stage was also run with its energy measured (codecarbon; 82 configurations; final report
+Section 11, outputs in [`results/green/`](results/green/SUMMARY.md)). Measured as GPU energy, the full
+system needs 8.7 Wh for its five-fold predictions, 81% of it to train the seven networks. Gradient
+boosting on ratios + language features alone scores 0.795 against 0.807, a difference inside the
+noise, with about 42 times less GPU energy; three network seeds instead of seven give 0.805 for 51%
+less. The NLP notebook now embeds only the 96 sentences per section that the network reads (fp16,
+cached) and reports its own energy use; the deep-learning notebook and the final results are unchanged.
+
 ## Quick start
 
 ```powershell
@@ -74,7 +84,8 @@ src/bpp/
 data/                   raw/ interim/ processed/ (not in git), manual/ (templates in git)
 docs/                   plan, setup, phase guides, data dictionary, decisions and progress logs,
                         the progress report and the final report
-final_run/              final models, evaluation, report builder, scoring tool
+final_run/              final models, evaluation, report builder, scoring tool, Green AI study
+results/green/          Green AI study: energy and accuracy of 82 configurations, figure, decisions log
 notebooks/              setup + smoke test; 1_NLP_text_to_features, 2_DL_model_and_evaluation (Colab)
 tests/                  pytest suite
 ```

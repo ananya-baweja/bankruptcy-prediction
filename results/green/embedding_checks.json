@@ -1,0 +1,26 @@
+{
+ "fresh_vs_existing_cache": {
+  "bitwise_identical": true,
+  "max_abs_diff": 0.0,
+  "mean_cos": 1.0
+ },
+ "finbert_fp16_vs_fp32": {
+  "mean_cos": 0.9999995827674866,
+  "min_cos": 0.9999845027923584,
+  "passes_0_99": true
+ },
+ "finbert_bf16_vs_fp32": {
+  "mean_cos": 0.9999778270721436,
+  "min_cos": 0.9992133975028992,
+  "passes_0_99": true
+ },
+ "n32_prefix_identical": false,
+ "n64_prefix_identical": true,
+ "n128_prefix_identical": true,
+ "finbert_int8_vs_fp32": {
+  "mean_cos": 0.7430314421653748,
+  "min_cos": 0.4811820089817047,
+  "passes_0_99": false
+ },
+ "n96_prefix_identical": false
+}

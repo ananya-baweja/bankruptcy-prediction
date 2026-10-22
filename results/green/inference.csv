@@ -1,0 +1,14 @@
+benchmark,encoder,precision,device,sentences,n_params,n_docs,ms_per_doc,ms_per_doc_median,ms_per_doc_p95,gpu_j_per_doc,gpu_mg_co2e_per_doc,j_per_doc_ub,mg_co2e_per_doc_ub,cpu_bound_under_load,gpu_peak_mem_mb,cpu_util_mean,method
+finbert_gpu_fp16_n200,ProsusAI/finbert,fp16,cuda,200,109482240,212,213.063,186.856,400.384,10.2618,2.03367,28.8724,5.72187,False,358.606,79.1152,codecarbon
+finbert_gpu_fp32_n200,ProsusAI/finbert,fp32,cuda,200,109482240,139,326.73,285.338,616.543,33.6236,6.66345,58.1353,11.5211,False,657.842,73.5739,codecarbon
+finbert_gpu_fp16_n96,ProsusAI/finbert,fp16,cuda,96,109482240,242,187.504,157.193,325.097,7.76709,1.53927,25.0604,4.96642,False,346.458,81.6174,codecarbon
+finbert_gpu_fp16_n64,ProsusAI/finbert,fp16,cuda,64,109482240,279,162.544,139.969,317.483,6.33194,1.25485,21.6107,4.28276,False,346.458,82.1826,codecarbon
+finbert_cpu_fp32_n200,ProsusAI/finbert,fp32,cpu,200,109482240,40,7552.02,6101.25,16125.7,36.5205,7.23757,1140.66,226.054,True,17.25,98.9917,codecarbon
+finbert_cpu_int8_n200,ProsusAI/finbert,int8,cpu,200,109482240,40,6871.74,5467.19,14532.3,31.8283,6.30768,947.451,187.764,True,17.25,95.3447,codecarbon
+finbert_cpu_int8_n96,ProsusAI/finbert,int8,cpu,96,109482240,40,4428.05,4947.73,6525.67,20.2357,4.01028,624.062,123.675,True,17.25,96.2118,codecarbon
+minilm_gpu_fp16_n200,sentence-transformers/all-MiniLM-L6-v2,fp16,cuda,200,22713216,250,180.77,156.842,326.227,4.74198,0.939756,22.1473,4.3891,False,126.132,82.6957,codecarbon
+minilm_cpu_fp32_n200,sentence-transformers/all-MiniLM-L6-v2,fp32,cpu,200,22713216,40,1537.05,1355.12,2951.23,11.0469,2.18925,235.752,46.7208,True,17.25,98.8726,codecarbon
+minilm_cpu_int8_n200,sentence-transformers/all-MiniLM-L6-v2,int8,cpu,200,22713216,40,1472.02,1206.84,2961.62,7.01891,1.39099,218.984,43.3978,True,17.25,98.1068,codecarbon
+findistilroberta_cpu_int8_n200,mrm8488/distilroberta-finetuned-financial-news-sentiment-analysis,int8,cpu,200,82118400,40,3587.73,3013.09,7062.08,16.752,3.31989,495.976,98.2915,True,17.25,95.5111,codecarbon
+distilroberta_cpu_int8_n200,distilroberta-base,int8,cpu,200,82118400,40,3672.49,2994.66,7688.49,16.9435,3.35783,505.18,100.116,True,17.25,95.2728,codecarbon
+gb_only_cpu,none (GB only),-,cpu,0,0,22993,1.9552,1.78909,3.1877,0.00886945,0.00175773,0.298846,0.0592247,True,17.25,99.25,codecarbon
