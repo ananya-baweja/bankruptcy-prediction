@@ -46,16 +46,18 @@ python green_report.py                   # green_results.csv, inference.csv, par
 cd report && node build_green_section.js # the report section alone -> results/green/Green_AI_section.docx
 ```
 
-Table 22 of the report (the seed and no-network configurations on the corrected data, from the
+Table 20 of the report (the seed and no-network configurations on the corrected data, from the
 saved predictions of the final run; no GPU needed):
 
 ```bash
 python green_on_corrected_data.py "<project folder>/final_run"   # -> results/green/green_on_corrected_data.csv
 ```
 
-The submitted report was assembled by inserting Section 11 into the 3 October report with
+The submitted report was assembled by inserting the Green AI study (first as Section 11) into the 3 October report with
 `report/merge_green_section.py` (Node's `docx` package could not be installed at the time), so
-Sections 1-10 are byte-for-byte the text of the 3 October build.
+Sections 1-10 are byte-for-byte the text of the 3 October build. `report/reorder_sections.py` then
+moved the Green AI study before "Scoring a new company" so the report follows the notebook's order
+(Green AI is Section 10, scoring Section 11).
 
 After a change to the language features or ratios, `run_gpu.py --out results_v2 --reuse results`
 re-runs only the 30 runs that read them and copies the 15 text-only runs.

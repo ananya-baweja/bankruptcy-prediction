@@ -32,7 +32,7 @@ management's MD&A. Details, tests and limitations: the final report.
 ## Green AI
 
 Every stage was also run with its energy measured (codecarbon; 82 configurations; final report
-Section 11, outputs in [`results/green/`](results/green/SUMMARY.md)). Measured as GPU energy, the full
+Section 10, outputs in [`results/green/`](results/green/SUMMARY.md)). Measured as GPU energy, the full
 system needs 8.7 Wh for its five-fold predictions, 81% of it to train the seven networks. Gradient
 boosting on ratios + language features alone scores 0.795 against 0.807, a difference inside the
 noise, with about 42 times less GPU energy; three network seeds instead of seven give 0.805 for 51%
