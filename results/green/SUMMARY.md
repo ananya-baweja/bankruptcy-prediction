@@ -1,9 +1,9 @@
 # Green AI study: accuracy versus energy cost
 
-> **Read with the final report, Section 11.** This study ran on the data before the CARO-flag
+> **Read with the final report, Section 10.** This study ran on the data before the CARO-flag
 > correction (blend 0.792 here, 0.807 in the report). The configurations that decide the conclusion
 > (fewer seeds, no network) were rescored on the corrected data from the final run's saved
-> predictions: [`green_on_corrected_data.csv`](green_on_corrected_data.csv), report Table 22. There,
+> predictions: [`green_on_corrected_data.csv`](green_on_corrected_data.csv), report Table 20. There,
 > gradient boosting on ratios + language scores 0.795 against 0.807 (interval -0.031 to +0.009) and
 > three seeds 0.805.
 

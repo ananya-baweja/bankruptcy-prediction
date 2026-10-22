@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Table 22 of the final report: the Green AI configurations that need no new training (1, 3, 5 or 7
+"""Table 20 of the final report: the Green AI configurations that need no new training (1, 3, 5 or 7
 network seeds; no network at all), scored on the corrected data of Section 7 from the saved
 out-of-fold predictions of the final run. No GPU needed.
 

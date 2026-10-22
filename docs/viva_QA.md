@@ -1,6 +1,6 @@
 # Viva questions and answers: Green AI
 
-Prepared answers for the Green AI part of the viva (final report, Section 11). The full Q&A for the
+Prepared answers for the Green AI part of the viva (final report, Section 10). The full Q&A for the
 rest of the project is the PDF `Viva_QA_Insolvency_Early_Warning.pdf`, whose last two pages repeat
 these answers. Energy is GPU energy read from the NVIDIA driver (NVML); CO₂e is computed from it with
 codecarbon's India grid factor (0.713 kg per kWh). Accuracy is on the corrected data of Section 7
@@ -27,12 +27,12 @@ every stage. Its own logs showed the processor 64-68% busy even in stages that o
 unrelated background processes were running on the GPU computer throughout, which inflates its
 processor estimate (rated power × utilisation) by an unknown amount. The GPU reading comes from the
 driver and is unaffected; integrating nvidia-smi power once a second agrees within 3.4%. Whole-machine
-totals are kept only as upper bounds (report Table 24).
+totals are kept only as upper bounds (report Table 22).
 
 **Why are the full study's accuracies lower than the rest of the report?** The 82-configuration study
 ran on the data before the CARO-flag correction (its blend scores 0.792, not 0.807). Every configuration
 saw the same data, so comparisons between them hold. The configurations the conclusion depends on were
-rescored on the corrected data from the saved predictions (report Table 22); their energy does not
+rescored on the corrected data from the saved predictions (report Table 20); their energy does not
 depend on the flags.
 
 **Was the selection rule fixed in advance?** Yes: the lowest-energy configuration within 0.010 PR-AUC
